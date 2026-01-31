@@ -1,0 +1,33 @@
+name: kaawa_mobile
+description: A new Flutter project for connecting coffee farmers and buyers.
+
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.2
+  sqflite: ^2.2.8+4
+  path: ^1.8.2
+  url_launcher: ^6.1.12
+  image_picker: ^1.0.4
+  path_provider: ^2.1.1
+  web_socket_channel: ^2.4.0
+  intl: ^0.18.1
+  geolocator: ^10.1.0
+  geocoding: ^2.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
