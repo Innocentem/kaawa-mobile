@@ -210,7 +210,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                         ),
                                         title: Text(farmer.fullName),
                                         subtitle: Text(
-                                            'District: ${farmer.district}\nCoffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg'),
+                                            'District: ${farmer.district}\n${farmer.coffeeType != null ? 'Coffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg' : 'No coffee listing available yet'}'),
                                         trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
