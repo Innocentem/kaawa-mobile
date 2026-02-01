@@ -99,11 +99,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       latitude: widget.profileOwner.latitude, // Latitude and longitude are not editable in this screen
       longitude: widget.profileOwner.longitude,
       village: _villageController.text,
-      coffeeType: _coffeeTypeController.text,
+      coffeeType: _coffeeTypeController.text.isEmpty ? null : _coffeeTypeController.text,
       quantity: double.tryParse(_quantityController.text),
       pricePerKg: double.tryParse(_pricePerKgController.text),
       coffeePicturePath: _coffeePicturePath,
-      coffeeTypeSought: _coffeeTypeSoughtController.text,
+      coffeeTypeSought: _coffeeTypeSoughtController.text.isEmpty ? null : _coffeeTypeSoughtController.text,
     );
 
     await DatabaseHelper.instance.updateUser(updatedUser);
@@ -204,7 +204,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, {bool isEnabled = true, TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildTextField(TextEditingController controller, String label, {bool isEnabled = true, TextInputType keyboardType = TextInputType.text, bool isRequired = true}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
@@ -218,7 +218,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         readOnly: !isEnabled,
         keyboardType: keyboardType,
         validator: (value) {
-          if (value == null || value.isEmpty) {
+          if (isRequired && (value == null || value.isEmpty)) {
             return 'Please enter $label';
           }
           return null;
@@ -230,9 +230,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Widget> get _farmerFields {
     return [
       _buildTextField(_villageController, 'Village', isEnabled: _isEditing),
-      _buildTextField(_coffeeTypeController, 'Coffee Type', isEnabled: _isEditing),
-      _buildTextField(_quantityController, 'Quantity (in Kgs)', isEnabled: _isEditing, keyboardType: TextInputType.number),
-      _buildTextField(_pricePerKgController, 'Price per Kg (in UGX)', isEnabled: _isEditing, keyboardType: TextInputType.number),
+      _buildTextField(_coffeeTypeController, 'Coffee Type', isEnabled: _isEditing, isRequired: false),
+      _buildTextField(_quantityController, 'Quantity (in Kgs)', isEnabled: _isEditing, keyboardType: TextInputType.number, isRequired: false),
+      _buildTextField(_pricePerKgController, 'Price per Kg (in UGX)', isEnabled: _isEditing, keyboardType: TextInputType.number, isRequired: false),
       if (_isEditing)
         _buildImagePicker(isProfilePic: false, label: 'Coffee Picture'),
       if (!_isEditing && _coffeePicturePath != null)

@@ -105,6 +105,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     }
   }
 
+  String _getCoffeeInfoText(User farmer) {
+    if (farmer.coffeeType != null && farmer.quantity != null && farmer.pricePerKg != null) {
+      return 'Coffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg';
+    }
+    return 'No coffee listing available yet';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -210,7 +217,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                         ),
                                         title: Text(farmer.fullName),
                                         subtitle: Text(
-                                            'District: ${farmer.district}\nCoffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg'),
+                                            'District: ${farmer.district}\n${_getCoffeeInfoText(farmer)}'),
                                         trailing: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [

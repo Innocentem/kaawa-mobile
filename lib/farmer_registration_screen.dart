@@ -20,7 +20,6 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   final _phoneNumberController = TextEditingController();
   final _districtController = TextEditingController();
   final _villageController = TextEditingController();
-  final _coffeeTypeController = TextEditingController();
   final _passwordController = TextEditingController();
   Position? _currentPosition;
 
@@ -112,16 +111,6 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                   return null;
                 },
               ),
-              TextFormField(
-                controller: _coffeeTypeController,
-                decoration: const InputDecoration(labelText: 'Coffee Type (e.g., Arabica, Robusta)'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the coffee type';
-                  }
-                  return null;
-                },
-              ),
               const SizedBox(height: 16),
               if (_currentPosition != null)
                 Text(
@@ -145,7 +134,6 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                       userType: UserType.farmer,
                       fcmToken: fcmToken,
                       village: _villageController.text,
-                      coffeeType: _coffeeTypeController.text,
                       latitude: _currentPosition?.latitude,
                       longitude: _currentPosition?.longitude,
                     );
