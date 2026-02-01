@@ -7,6 +7,8 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
+import 'package:kaawa_mobile/theme/app_colors.dart';
+import 'package:kaawa_mobile/theme/app_typography.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
@@ -108,11 +110,14 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.cream,
       appBar: AppBar(
         title: Text('Welcome, ${widget.buyer.fullName}'),
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.star),
+            tooltip: 'Favorites',
             onPressed: () {
               Navigator.push(
                 context,
@@ -124,6 +129,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.person),
+            tooltip: 'Profile',
             onPressed: () {
               Navigator.push(
                 context,
@@ -140,21 +146,36 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Available Farmers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Search by name, district, or coffee type',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.search),
+            Text(
+              'Available Farmers',
+              style: AppTypography.headlineMedium.copyWith(
+                fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.sort),
-              label: Text(_sortByDistance ? 'Sort by Name' : 'Sort by Distance'),
-              onPressed: _toggleSortByDistance,
+            // Search bar
+            TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                labelText: 'Search farmers',
+                hintText: 'Search by name, district, or coffee type',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Sort button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.sort),
+                label: Text(
+                  _sortByDistance ? 'Sort by Name' : 'Sort by Distance',
+                  style: AppTypography.button,
+                ),
+                onPressed: _toggleSortByDistance,
+              ),
             ),
             const SizedBox(height: 16),
             Expanded(
@@ -162,14 +183,50 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                 future: _farmersFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryBrown),
+                      ),
+                    );
                   } else if (snapshot.hasError) {
-                    return const Center(child: Text('Error loading farmers.'));
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 60,
+                            color: AppColors.error,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Error loading farmers',
+                            style: AppTypography.titleLarge,
+                          ),
+                        ],
+                      ),
+                    );
                   } else {
                     _allFarmers = snapshot.data ?? [];
                     _filteredFarmers = List.from(_allFarmers);
                     return _filteredFarmers.isEmpty && _searchController.text.isNotEmpty
-                        ? const Center(child: Text('No farmers found.'))
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.search_off,
+                                  size: 60,
+                                  color: AppColors.textLight,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No farmers found',
+                                  style: AppTypography.titleLarge,
+                                ),
+                              ],
+                            ),
+                          )
                         : ListView.builder(
                             itemCount: _filteredFarmers.length,
                             itemBuilder: (context, index) {
@@ -187,8 +244,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                     ) / 1000
                                   : null;
                               return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
+                                margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
                                 child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
                                   onTap: () {
                                     Navigator.push(
                                       context,
@@ -199,29 +261,167 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                   },
                                   child: Column(
                                     children: [
-                                      ListTile(
-                                        leading: CircleAvatar(
-                                          backgroundImage: farmer.profilePicturePath != null
-                                              ? FileImage(File(farmer.profilePicturePath!))
-                                              : null,
-                                          child: farmer.profilePicturePath == null
-                                              ? const Icon(Icons.person)
-                                              : null,
-                                        ),
-                                        title: Text(farmer.fullName),
-                                        subtitle: Text(
-                                            'District: ${farmer.district}\nCoffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg'),
-                                        trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
+                                      Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Column(
                                           children: [
-                                            if (distance != null)
-                                              Text('${distance.toStringAsFixed(1)} km'),
-                                            IconButton(
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border),
-                                              onPressed: () => _toggleFavorite(farmer.id!),
+                                            Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 30,
+                                                  backgroundColor: AppColors.primaryBrown.withOpacity(0.1),
+                                                  backgroundImage: farmer.profilePicturePath != null
+                                                      ? FileImage(File(farmer.profilePicturePath!))
+                                                      : null,
+                                                  child: farmer.profilePicturePath == null
+                                                      ? const Icon(Icons.person, color: AppColors.primaryBrown, size: 30)
+                                                      : null,
+                                                ),
+                                                const SizedBox(width: 16),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        farmer.fullName,
+                                                        style: AppTypography.titleLarge.copyWith(
+                                                          fontWeight: FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      const SizedBox(height: 4),
+                                                      Row(
+                                                        children: [
+                                                          const Icon(
+                                                            Icons.location_on,
+                                                            size: 14,
+                                                            color: AppColors.textMedium,
+                                                          ),
+                                                          const SizedBox(width: 4),
+                                                          Text(
+                                                            farmer.district,
+                                                            style: AppTypography.bodySmall.copyWith(
+                                                              color: AppColors.textMedium,
+                                                            ),
+                                                          ),
+                                                          if (distance != null) ...[
+                                                            const SizedBox(width: 12),
+                                                            Container(
+                                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                              decoration: BoxDecoration(
+                                                                color: AppColors.primaryGreen.withOpacity(0.1),
+                                                                borderRadius: BorderRadius.circular(8),
+                                                              ),
+                                                              child: Text(
+                                                                '${distance.toStringAsFixed(1)} km',
+                                                                style: AppTypography.labelSmall.copyWith(
+                                                                  color: AppColors.primaryGreen,
+                                                                  fontWeight: FontWeight.bold,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: Icon(
+                                                    isFavorite ? Icons.star : Icons.star_border,
+                                                    color: isFavorite ? Colors.amber : AppColors.textLight,
+                                                  ),
+                                                  onPressed: () => _toggleFavorite(farmer.id!),
+                                                ),
+                                              ],
                                             ),
-                                            IconButton(
-                                              icon: const Icon(Icons.message),
+                                            const SizedBox(height: 12),
+                                            // Coffee info
+                                            Container(
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primaryBrown.withOpacity(0.05),
+                                                borderRadius: BorderRadius.circular(12),
+                                              ),
+                                              child: Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.coffee,
+                                                        size: 20,
+                                                        color: AppColors.primaryBrown,
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Text(
+                                                        farmer.coffeeType ?? 'N/A',
+                                                        style: AppTypography.bodyMedium.copyWith(
+                                                          fontWeight: FontWeight.bold,
+                                                          color: AppColors.primaryBrown,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.inventory_2,
+                                                        size: 18,
+                                                        color: AppColors.textMedium,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        '${farmer.quantity ?? 0} Kgs',
+                                                        style: AppTypography.bodySmall.copyWith(
+                                                          color: AppColors.textDark,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.primaryGreen,
+                                                      borderRadius: BorderRadius.circular(8),
+                                                    ),
+                                                    child: Text(
+                                                      'UGX ${farmer.pricePerKg ?? 0}/Kg',
+                                                      style: AppTypography.labelMedium.copyWith(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (farmer.coffeePicturePath != null)
+                                        ClipRRect(
+                                          borderRadius: const BorderRadius.only(
+                                            bottomLeft: Radius.circular(16),
+                                            bottomRight: Radius.circular(16),
+                                          ),
+                                          child: Image.file(
+                                            File(farmer.coffeePicturePath!),
+                                            height: 200,
+                                            width: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      const Divider(height: 1),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                        children: [
+                                          Expanded(
+                                            child: TextButton.icon(
+                                              icon: const Icon(Icons.message, size: 18),
+                                              label: const Text('Message'),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: AppColors.primaryBrown,
+                                              ),
                                               onPressed: () {
                                                 Navigator.push(
                                                   context,
@@ -234,20 +434,39 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                                 );
                                               },
                                             ),
-                                            IconButton(
-                                              icon: const Icon(Icons.phone),
+                                          ),
+                                          Container(
+                                            width: 1,
+                                            height: 24,
+                                            color: AppColors.beige,
+                                          ),
+                                          Expanded(
+                                            child: TextButton.icon(
+                                              icon: const Icon(Icons.phone, size: 18),
+                                              label: const Text('Call'),
+                                              style: TextButton.styleFrom(
+                                                foregroundColor: AppColors.primaryGreen,
+                                              ),
                                               onPressed: () => _makePhoneCall(farmer.phoneNumber),
                                             ),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
-                                      if (farmer.coffeePicturePath != null)
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Image.file(File(farmer.coffeePicturePath!)),
-                                        ),
                                     ],
                                   ),
+                                ),
+                              );
+                            },
+                          );
+                  }
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
                                 ),
                               );
                             },
