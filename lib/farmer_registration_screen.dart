@@ -1,4 +1,7 @@
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -18,8 +21,7 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   final _districtController = TextEditingController();
   final _villageController = TextEditingController();
   final _coffeeTypeController = TextEditingController();
-  final _quantityController = TextEditingController();
-  final _pricePerKgController = TextEditingController();
+  final _passwordController = TextEditingController();
   Position? _currentPosition;
 
   Future<void> _getCurrentLocation() async {
@@ -70,6 +72,27 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                 },
               ),
               TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a password';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                decoration: const InputDecoration(labelText: 'Confirm Password'),
+                obscureText: true,
+                validator: (value) {
+                  if (value != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
                 controller: _districtController,
                 decoration: const InputDecoration(labelText: 'District'),
                 validator: (value) {
@@ -99,28 +122,6 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                   return null;
                 },
               ),
-              TextFormField(
-                controller: _quantityController,
-                decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the quantity';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _pricePerKgController,
-                decoration: const InputDecoration(labelText: 'Price per Kg (in UGX)'),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the price per Kg';
-                  }
-                  return null;
-                },
-              ),
               const SizedBox(height: 16),
               if (_currentPosition != null)
                 Text(
@@ -134,15 +135,17 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
+                    final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
+                    final fcmToken = await FirebaseMessaging.instance.getToken();
                     final newUser = User(
                       fullName: _fullNameController.text,
                       phoneNumber: _phoneNumberController.text,
+                      password: hashedPassword,
                       district: _districtController.text,
                       userType: UserType.farmer,
+                      fcmToken: fcmToken,
                       village: _villageController.text,
                       coffeeType: _coffeeTypeController.text,
-                      quantity: double.tryParse(_quantityController.text) ?? 0.0,
-                      pricePerKg: double.tryParse(_pricePerKgController.text) ?? 0.0,
                       latitude: _currentPosition?.latitude,
                       longitude: _currentPosition?.longitude,
                     );

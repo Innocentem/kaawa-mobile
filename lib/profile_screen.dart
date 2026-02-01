@@ -6,7 +6,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/write_review_screen.dart';
 import 'package:kaawa_mobile/view_reviews_screen.dart';
-import 'package:path/path.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -72,7 +72,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (pickedFile != null) {
       final appDir = await getApplicationDocumentsDirectory();
-      final fileName = basename(pickedFile.path);
+      final fileName = p.basename(pickedFile.path);
       final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
 
       setState(() {
@@ -92,6 +92,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       id: widget.profileOwner.id,
       fullName: _fullNameController.text,
       phoneNumber: _phoneNumberController.text,
+      password: widget.profileOwner.password, // Keep the existing password
       district: _districtController.text,
       userType: widget.profileOwner.userType,
       profilePicturePath: _profilePicturePath,

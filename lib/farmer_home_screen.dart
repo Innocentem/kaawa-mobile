@@ -5,6 +5,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/favorites_screen.dart';
+import 'package:kaawa_mobile/manage_stock_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,12 +24,21 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
   List<User> _filteredBuyers = [];
   final _searchController = TextEditingController();
   bool _sortByDistance = false;
+  Set<int> _favoriteUserIds = {};
 
   @override
   void initState() {
     super.initState();
     _buyersFuture = _getBuyers();
     _searchController.addListener(_filterBuyers);
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    final favorites = await DatabaseHelper.instance.getFavorites(widget.farmer.id!);
+    setState(() {
+      _favoriteUserIds = favorites.map((user) => user.id!).toSet();
+    });
   }
 
   Future<List<User>> _getBuyers() async {
@@ -75,6 +86,15 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
     });
   }
 
+  Future<void> _toggleFavorite(int buyerId) async {
+    if (_favoriteUserIds.contains(buyerId)) {
+      await DatabaseHelper.instance.removeFavorite(widget.farmer.id!, buyerId);
+    } else {
+      await DatabaseHelper.instance.addFavorite(widget.farmer.id!, buyerId);
+    }
+    _loadFavorites();
+  }
+
   Future<void> _makePhoneCall(String phoneNumber) async {
     final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
     if (await canLaunchUrl(launchUri)) {
@@ -93,6 +113,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         title: Text('Welcome, ${widget.farmer.fullName}'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.star),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FavoritesScreen(currentUser: widget.farmer),
+                ),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
               Navigator.push(
@@ -110,6 +141,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            ElevatedButton.icon(
+              icon: const Icon(Icons.inventory),
+              label: const Text('Manage Your Stock'),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ManageStockScreen(farmer: widget.farmer),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
             const Text('Available Buyers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             TextField(
@@ -144,6 +188,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                             itemCount: _filteredBuyers.length,
                             itemBuilder: (context, index) {
                               final buyer = _filteredBuyers[index];
+                              final isFavorite = _favoriteUserIds.contains(buyer.id);
                               final distance = widget.farmer.latitude != null &&
                                       widget.farmer.longitude != null &&
                                       buyer.latitude != null &&
@@ -183,6 +228,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> {
                                       children: [
                                         if (distance != null)
                                           Text('${distance.toStringAsFixed(1)} km'),
+                                        IconButton(
+                                          icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                                          onPressed: () => _toggleFavorite(buyer.id!),
+                                        ),
                                         IconButton(
                                           icon: const Icon(Icons.message),
                                           onPressed: () {

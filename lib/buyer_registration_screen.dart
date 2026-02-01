@@ -1,4 +1,7 @@
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -17,6 +20,7 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
   final _phoneNumberController = TextEditingController();
   final _districtController = TextEditingController();
   final _coffeeTypeSoughtController = TextEditingController();
+  final _passwordController = TextEditingController();
   Position? _currentPosition;
 
   Future<void> _getCurrentLocation() async {
@@ -67,6 +71,27 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
                 },
               ),
               TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter a password';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
+                decoration: const InputDecoration(labelText: 'Confirm Password'),
+                obscureText: true,
+                validator: (value) {
+                  if (value != _passwordController.text) {
+                    return 'Passwords do not match';
+                  }
+                  return null;
+                },
+              ),
+              TextFormField(
                 controller: _districtController,
                 decoration: const InputDecoration(labelText: 'District'),
                 validator: (value) {
@@ -99,11 +124,15 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
+                    final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
+                    final fcmToken = await FirebaseMessaging.instance.getToken();
                     final newUser = User(
                       fullName: _fullNameController.text,
                       phoneNumber: _phoneNumberController.text,
+                      password: hashedPassword,
                       district: _districtController.text,
                       userType: UserType.buyer,
+                      fcmToken: fcmToken,
                       coffeeTypeSought: _coffeeTypeSoughtController.text,
                       latitude: _currentPosition?.latitude,
                       longitude: _currentPosition?.longitude,

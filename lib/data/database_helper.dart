@@ -20,7 +20,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    return await openDatabase(path, version: 5, onCreate: _createDb, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 9, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -30,10 +30,12 @@ class DatabaseHelper {
         fullName TEXT NOT NULL,
         phoneNumber TEXT NOT NULL UNIQUE,
         district TEXT NOT NULL,
+        password TEXT NOT NULL,
         userType TEXT NOT NULL,
         profilePicturePath TEXT,
         latitude REAL,
         longitude REAL,
+        fcmToken TEXT,
         village TEXT,
         coffeeType TEXT,
         quantity REAL,
@@ -44,6 +46,7 @@ class DatabaseHelper {
     ''');
     await _createMessagesTable(db);
     await _createReviewsTable(db);
+    await _createFavoritesTable(db);
   }
 
   Future<void> _createMessagesTable(Database db) async {
@@ -70,6 +73,16 @@ class DatabaseHelper {
     ''');
   }
 
+  Future<void> _createFavoritesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE favorites(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        userId INTEGER NOT NULL,
+        favoriteUserId INTEGER NOT NULL
+      )
+    ''');
+  }
+
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
@@ -85,6 +98,19 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await _createReviewsTable(db);
+    }
+    if (oldVersion < 6) {
+      await db.execute('ALTER TABLE users ADD COLUMN password TEXT');
+    }
+    if (oldVersion < 7) {
+      await db.execute('ALTER TABLE users ADD COLUMN quantity REAL');
+      await db.execute('ALTER TABLE users ADD COLUMN pricePerKg REAL');
+    }
+    if (oldVersion < 8) {
+      await _createFavoritesTable(db);
+    }
+    if (oldVersion < 9) {
+      await db.execute('ALTER TABLE users ADD COLUMN fcmToken TEXT');
     }
   }
 
@@ -153,5 +179,34 @@ class DatabaseHelper {
       whereArgs: [reviewedUserId],
     );
     return maps.map((map) => Review.fromMap(map)).toList();
+  }
+
+  Future<void> addFavorite(int userId, int favoriteUserId) async {
+    final db = await instance.database;
+    await db.insert('favorites', {'userId': userId, 'favoriteUserId': favoriteUserId});
+  }
+
+  Future<void> removeFavorite(int userId, int favoriteUserId) async {
+    final db = await instance.database;
+    await db.delete('favorites', where: 'userId = ? AND favoriteUserId = ?', whereArgs: [userId, favoriteUserId]);
+  }
+
+  Future<List<User>> getFavorites(int userId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query('favorites', where: 'userId = ?', whereArgs: [userId]);
+    if (maps.isEmpty) {
+      return [];
+    }
+
+    List<int> favoriteIds = maps.map((map) => map['favoriteUserId'] as int).toList();
+    final userMaps = await db.query('users', where: 'id IN (?)', whereArgs: [favoriteIds]);
+
+    return userMaps.map((map) => User.fromMap(map)).toList();
+  }
+
+  Future<bool> isFavorite(int userId, int favoriteUserId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query('favorites', where: 'userId = ? AND favoriteUserId = ?', whereArgs: [userId, favoriteUserId]);
+    return maps.isNotEmpty;
   }
 }

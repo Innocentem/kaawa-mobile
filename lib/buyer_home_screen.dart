@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -22,12 +23,21 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
   List<User> _filteredFarmers = [];
   final _searchController = TextEditingController();
   bool _sortByDistance = false;
+  Set<int> _favoriteUserIds = {};
 
   @override
   void initState() {
     super.initState();
     _farmersFuture = _getFarmers();
     _searchController.addListener(_filterFarmers);
+    _loadFavorites();
+  }
+
+  Future<void> _loadFavorites() async {
+    final favorites = await DatabaseHelper.instance.getFavorites(widget.buyer.id!);
+    setState(() {
+      _favoriteUserIds = favorites.map((user) => user.id!).toSet();
+    });
   }
 
   Future<List<User>> _getFarmers() async {
@@ -75,6 +85,15 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     });
   }
 
+  Future<void> _toggleFavorite(int farmerId) async {
+    if (_favoriteUserIds.contains(farmerId)) {
+      await DatabaseHelper.instance.removeFavorite(widget.buyer.id!, farmerId);
+    } else {
+      await DatabaseHelper.instance.addFavorite(widget.buyer.id!, farmerId);
+    }
+    _loadFavorites();
+  }
+
   Future<void> _makePhoneCall(String phoneNumber) async {
     final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
     if (await canLaunchUrl(launchUri)) {
@@ -92,6 +111,17 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
       appBar: AppBar(
         title: Text('Welcome, ${widget.buyer.fullName}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.star),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => FavoritesScreen(currentUser: widget.buyer),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () {
@@ -144,6 +174,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                             itemCount: _filteredFarmers.length,
                             itemBuilder: (context, index) {
                               final farmer = _filteredFarmers[index];
+                              final isFavorite = _favoriteUserIds.contains(farmer.id);
                               final distance = widget.buyer.latitude != null &&
                                       widget.buyer.longitude != null &&
                                       farmer.latitude != null &&
@@ -185,6 +216,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                           children: [
                                             if (distance != null)
                                               Text('${distance.toStringAsFixed(1)} km'),
+                                            IconButton(
+                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                                              onPressed: () => _toggleFavorite(farmer.id!),
+                                            ),
                                             IconButton(
                                               icon: const Icon(Icons.message),
                                               onPressed: () {

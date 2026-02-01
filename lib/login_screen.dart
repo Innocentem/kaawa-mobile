@@ -1,4 +1,6 @@
 
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/farmer_home_screen.dart';
@@ -15,6 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneNumberController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +42,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   return null;
                 },
               ),
+              TextFormField(
+                controller: _passwordController,
+                decoration: const InputDecoration(labelText: 'Password'),
+                obscureText: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your password';
+                  }
+                  return null;
+                },
+              ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () async {
@@ -47,20 +61,27 @@ class _LoginScreenState extends State<LoginScreen> {
                     final user = await DatabaseHelper.instance.getUser(phoneNumber);
 
                     if (user != null) {
-                      // Navigate to the correct home screen based on user type
-                      if (user.userType == UserType.farmer) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => FarmerHomeScreen(farmer: user),
-                          ),
-                        );
+                      final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
+                      if (user.password == hashedPassword) {
+                        // Navigate to the correct home screen based on user type
+                        if (user.userType == UserType.farmer) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FarmerHomeScreen(farmer: user),
+                            ),
+                          );
+                        } else {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => BuyerHomeScreen(buyer: user),
+                            ),
+                          );
+                        }
                       } else {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => BuyerHomeScreen(buyer: user),
-                          ),
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Incorrect password.')),
                         );
                       }
                     } else {
