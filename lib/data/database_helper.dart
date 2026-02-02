@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/message_data.dart';
 import 'package:kaawa_mobile/data/review_data.dart';
+import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -20,7 +21,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    return await openDatabase(path, version: 9, onCreate: _createDb, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 12, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -35,18 +36,13 @@ class DatabaseHelper {
         profilePicturePath TEXT,
         latitude REAL,
         longitude REAL,
-        fcmToken TEXT,
-        village TEXT,
-        coffeeType TEXT,
-        quantity REAL,
-        pricePerKg REAL,
-        coffeePicturePath TEXT,
-        coffeeTypeSought TEXT
+        village TEXT
       )
     ''');
     await _createMessagesTable(db);
     await _createReviewsTable(db);
     await _createFavoritesTable(db);
+    await _createCoffeeStockTable(db);
   }
 
   Future<void> _createMessagesTable(Database db) async {
@@ -83,34 +79,27 @@ class DatabaseHelper {
     ''');
   }
 
+  Future<void> _createCoffeeStockTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE coffee_stock(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        farmerId INTEGER NOT NULL,
+        coffeeType TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        pricePerKg REAL NOT NULL
+      )
+    ''');
+  }
+
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('ALTER TABLE users ADD COLUMN profilePicturePath TEXT');
-      await db.execute('ALTER TABLE users ADD COLUMN coffeePicturePath TEXT');
+    if (oldVersion < 11) {
+      await db.execute('CREATE TABLE users_temp AS SELECT id, fullName, phoneNumber, district, password, userType, profilePicturePath, latitude, longitude, village FROM users');
+      await db.execute('DROP TABLE users');
+      await db.execute('ALTER TABLE users_temp RENAME TO users');
     }
-    if (oldVersion < 3) {
-      await _createMessagesTable(db);
-    }
-    if (oldVersion < 4) {
-      await db.execute('ALTER TABLE users ADD COLUMN latitude REAL');
-      await db.execute('ALTER TABLE users ADD COLUMN longitude REAL');
-    }
-    if (oldVersion < 5) {
-      await _createReviewsTable(db);
-    }
-    if (oldVersion < 6) {
-      await db.execute('ALTER TABLE users ADD COLUMN password TEXT');
-    }
-    if (oldVersion < 7) {
-      await db.execute('ALTER TABLE users ADD COLUMN quantity REAL');
-      await db.execute('ALTER TABLE users ADD COLUMN pricePerKg REAL');
-    }
-    if (oldVersion < 8) {
-      await _createFavoritesTable(db);
-    }
-    if (oldVersion < 9) {
-      await db.execute('ALTER TABLE users ADD COLUMN fcmToken TEXT');
+    if (oldVersion < 12) {
+      await _createCoffeeStockTable(db);
     }
   }
 
@@ -208,5 +197,26 @@ class DatabaseHelper {
     final db = await instance.database;
     final List<Map<String, dynamic>> maps = await db.query('favorites', where: 'userId = ? AND favoriteUserId = ?', whereArgs: [userId, favoriteUserId]);
     return maps.isNotEmpty;
+  }
+
+  Future<int> insertCoffeeStock(CoffeeStock stock) async {
+    final db = await instance.database;
+    return await db.insert('coffee_stock', stock.toMap());
+  }
+
+  Future<int> updateCoffeeStock(CoffeeStock stock) async {
+    final db = await instance.database;
+    return await db.update(
+      'coffee_stock',
+      stock.toMap(),
+      where: 'id = ?',
+      whereArgs: [stock.id],
+    );
+  }
+
+  Future<List<CoffeeStock>> getCoffeeStock(int farmerId) async {
+    final db = await instance.database;
+    final maps = await db.query('coffee_stock', where: 'farmerId = ?', whereArgs: [farmerId]);
+    return maps.map((map) => CoffeeStock.fromMap(map)).toList();
   }
 }

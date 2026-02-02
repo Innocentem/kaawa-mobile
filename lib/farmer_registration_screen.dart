@@ -1,7 +1,6 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -125,14 +124,12 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
                     final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
-                    final fcmToken = await FirebaseMessaging.instance.getToken();
                     final newUser = User(
                       fullName: _fullNameController.text,
                       phoneNumber: _phoneNumberController.text,
                       password: hashedPassword,
                       district: _districtController.text,
                       userType: UserType.farmer,
-                      fcmToken: fcmToken,
                       village: _villageController.text,
                       latitude: _currentPosition?.latitude,
                       longitude: _currentPosition?.longitude,

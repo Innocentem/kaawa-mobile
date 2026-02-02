@@ -11,17 +11,9 @@ class User {
   final String? profilePicturePath;
   final double? latitude;
   final double? longitude;
-  final String? fcmToken;
 
   // Farmer-specific fields
   final String? village;
-  final String? coffeeType;
-  final double? quantity;
-  final double? pricePerKg;
-  final String? coffeePicturePath;
-
-  // Buyer-specific fields
-  final String? coffeeTypeSought;
 
   User({
     this.id,
@@ -33,13 +25,7 @@ class User {
     this.profilePicturePath,
     this.latitude,
     this.longitude,
-    this.fcmToken,
     this.village,
-    this.coffeeType,
-    this.quantity,
-    this.pricePerKg,
-    this.coffeePicturePath,
-    this.coffeeTypeSought,
   });
 
   Map<String, dynamic> toMap() {
@@ -53,13 +39,7 @@ class User {
       'profilePicturePath': profilePicturePath,
       'latitude': latitude,
       'longitude': longitude,
-      'fcmToken': fcmToken,
       'village': village,
-      'coffeeType': coffeeType,
-      'quantity': quantity,
-      'pricePerKg': pricePerKg,
-      'coffeePicturePath': coffeePicturePath,
-      'coffeeTypeSought': coffeeTypeSought,
     };
   }
 
@@ -74,13 +54,7 @@ class User {
       profilePicturePath: map['profilePicturePath'],
       latitude: map['latitude'],
       longitude: map['longitude'],
-      fcmToken: map['fcmToken'],
       village: map['village'],
-      coffeeType: map['coffeeType'],
-      quantity: map['quantity'],
-      pricePerKg: map['pricePerKg'],
-      coffeePicturePath: map['coffeePicturePath'],
-      coffeeTypeSought: map['coffeeTypeSought'],
     );
   }
 }

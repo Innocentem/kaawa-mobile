@@ -42,7 +42,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           } else {
             final favorites = snapshot.data ?? [];
             return favorites.isEmpty
-                ? const Center(child: Text('You have no favorites yet.'))
+                ? const Center(
+                    child: Text(
+                      'You have no favorites yet.\n\nAdd farmers and buyers to your favorites to see them here.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                    ),
+                  )
                 : ListView.builder(
                     itemCount: favorites.length,
                     itemBuilder: (context, index) {

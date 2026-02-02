@@ -1,7 +1,6 @@
 
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -19,7 +18,6 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
   final _fullNameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _districtController = TextEditingController();
-  final _coffeeTypeSoughtController = TextEditingController();
   final _passwordController = TextEditingController();
   Position? _currentPosition;
 
@@ -101,16 +99,6 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
                   return null;
                 },
               ),
-              TextFormField(
-                controller: _coffeeTypeSoughtController,
-                decoration: const InputDecoration(labelText: 'Coffee Type sought (e.g., Arabica, Robusta)'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the coffee type you are looking for';
-                  }
-                  return null;
-                },
-              ),
               const SizedBox(height: 16),
               if (_currentPosition != null)
                 Text(
@@ -125,15 +113,12 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
                     final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
-                    final fcmToken = await FirebaseMessaging.instance.getToken();
                     final newUser = User(
                       fullName: _fullNameController.text,
                       phoneNumber: _phoneNumberController.text,
                       password: hashedPassword,
                       district: _districtController.text,
                       userType: UserType.buyer,
-                      fcmToken: fcmToken,
-                      coffeeTypeSought: _coffeeTypeSoughtController.text,
                       latitude: _currentPosition?.latitude,
                       longitude: _currentPosition?.longitude,
                     );

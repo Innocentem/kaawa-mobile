@@ -17,13 +17,15 @@ class BuyerHomeScreen extends StatefulWidget {
   State<BuyerHomeScreen> createState() => _BuyerHomeScreenState();
 }
 
-class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
+class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderStateMixin {
   late Future<List<User>> _farmersFuture;
   List<User> _allFarmers = [];
   List<User> _filteredFarmers = [];
   final _searchController = TextEditingController();
   bool _sortByDistance = false;
   Set<int> _favoriteUserIds = {};
+  late AnimationController _animationController;
+  late Animation<double> _animation;
 
   @override
   void initState() {
@@ -31,6 +33,22 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     _farmersFuture = _getFarmers();
     _searchController.addListener(_filterFarmers);
     _loadFavorites();
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _animation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeIn,
+    );
+    _animationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadFavorites() async {
@@ -51,10 +69,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
       _filteredFarmers = _allFarmers.where((farmer) {
         final nameLower = farmer.fullName.toLowerCase();
         final districtLower = farmer.district.toLowerCase();
-        final coffeeTypeLower = farmer.coffeeType?.toLowerCase() ?? '';
         return nameLower.contains(query) ||
-            districtLower.contains(query) ||
-            coffeeTypeLower.contains(query);
+            districtLower.contains(query);
       }).toList();
     });
   }
@@ -105,13 +121,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
     }
   }
 
-  String _getCoffeeInfoText(User farmer) {
-    if (farmer.coffeeType != null && farmer.quantity != null && farmer.pricePerKg != null) {
-      return 'Coffee: ${farmer.coffeeType} - ${farmer.quantity} Kgs\nPrice: UGX ${farmer.pricePerKg}/Kg';
-    }
-    return 'No coffee listing available yet';
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,7 +161,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
             TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'Search by name, district, or coffee type',
+                labelText: 'Search by name or district',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.search),
               ),
@@ -175,56 +184,82 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                   } else {
                     _allFarmers = snapshot.data ?? [];
                     _filteredFarmers = List.from(_allFarmers);
-                    return _filteredFarmers.isEmpty && _searchController.text.isNotEmpty
-                        ? const Center(child: Text('No farmers found.'))
-                        : ListView.builder(
-                            itemCount: _filteredFarmers.length,
-                            itemBuilder: (context, index) {
-                              final farmer = _filteredFarmers[index];
-                              final isFavorite = _favoriteUserIds.contains(farmer.id);
-                              final distance = widget.buyer.latitude != null &&
-                                      widget.buyer.longitude != null &&
-                                      farmer.latitude != null &&
-                                      farmer.longitude != null
-                                  ? Geolocator.distanceBetween(
-                                      widget.buyer.latitude!,
-                                      widget.buyer.longitude!,
-                                      farmer.latitude!,
-                                      farmer.longitude!,
-                                    ) / 1000
-                                  : null;
-                              return Card(
-                                margin: const EdgeInsets.symmetric(vertical: 8),
-                                child: InkWell(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer),
-                                      ),
-                                    );
-                                  },
-                                  child: Column(
-                                    children: [
-                                      ListTile(
-                                        leading: CircleAvatar(
-                                          backgroundImage: farmer.profilePicturePath != null
-                                              ? FileImage(File(farmer.profilePicturePath!))
-                                              : null,
-                                          child: farmer.profilePicturePath == null
-                                              ? const Icon(Icons.person)
-                                              : null,
+                    return FadeTransition(
+                      opacity: _animation,
+                      child: _filteredFarmers.isEmpty && _searchController.text.isNotEmpty
+                          ? const Center(child: Text('No farmers found.'))
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 0.75,
+                              ),
+                              itemCount: _filteredFarmers.length,
+                              itemBuilder: (context, index) {
+                                final farmer = _filteredFarmers[index];
+                                final isFavorite = _favoriteUserIds.contains(farmer.id);
+                                final distance = widget.buyer.latitude != null &&
+                                        widget.buyer.longitude != null &&
+                                        farmer.latitude != null &&
+                                        farmer.longitude != null
+                                    ? Geolocator.distanceBetween(
+                                        widget.buyer.latitude!,
+                                        widget.buyer.longitude!,
+                                        farmer.latitude!,
+                                        farmer.longitude!,
+                                      ) / 1000
+                                    : null;
+                                return Card(
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer),
                                         ),
-                                        title: Text(farmer.fullName),
-                                        subtitle: Text(
-                                            'District: ${farmer.district}\n${_getCoffeeInfoText(farmer)}'),
-                                        trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
+                                      );
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        AspectRatio(
+                                          aspectRatio: 1,
+                                          child: CircleAvatar(
+                                            radius: 30,
+                                            backgroundImage: farmer.profilePicturePath != null
+                                                ? FileImage(File(farmer.profilePicturePath!))
+                                                : null,
+                                            child: farmer.profilePicturePath == null
+                                                ? const Icon(Icons.person, size: 30)
+                                                : null,
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 4),
+                                              Text('District: ${farmer.district}'),
+                                              if (distance != null)
+                                                Text('${distance.toStringAsFixed(1)} km away'),
+                                            ],
+                                          ),
+                                        ),
+                                        if (farmer.coffeePicturePath != null)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 8.0),
+                                            child: Image.file(File(farmer.coffeePicturePath!)),
+                                          ),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
                                           children: [
-                                            if (distance != null)
-                                              Text('${distance.toStringAsFixed(1)} km'),
                                             IconButton(
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
                                               onPressed: () => _toggleFavorite(farmer.id!),
                                             ),
                                             IconButton(
@@ -247,18 +282,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
                                             ),
                                           ],
                                         ),
-                                      ),
-                                      if (farmer.coffeePicturePath != null)
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Image.file(File(farmer.coffeePicturePath!)),
-                                        ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                          );
+                                );
+                              },
+                            ),
+                    );
                   }
                 },
               ),

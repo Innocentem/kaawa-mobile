@@ -1,7 +1,8 @@
 
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
+import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/data/user_data.dart';
 
 class ManageStockScreen extends StatefulWidget {
   final User farmer;
@@ -13,46 +14,29 @@ class ManageStockScreen extends StatefulWidget {
 }
 
 class _ManageStockScreenState extends State<ManageStockScreen> {
-  final _formKey = GlobalKey<FormState>();
-  late TextEditingController _coffeeTypeController;
-  late TextEditingController _quantityController;
-  late TextEditingController _pricePerKgController;
+  late Future<List<CoffeeStock>> _stockFuture;
 
   @override
   void initState() {
     super.initState();
-    _coffeeTypeController = TextEditingController(text: widget.farmer.coffeeType);
-    _quantityController = TextEditingController(text: widget.farmer.quantity?.toString());
-    _pricePerKgController = TextEditingController(text: widget.farmer.pricePerKg?.toString());
+    _stockFuture = _getCoffeeStock();
   }
 
-  Future<void> _saveStock() async {
-    if (_formKey.currentState!.validate()) {
-      final updatedFarmer = User(
-        id: widget.farmer.id,
-        fullName: widget.farmer.fullName,
-        phoneNumber: widget.farmer.phoneNumber,
-        password: widget.farmer.password,
-        district: widget.farmer.district,
-        userType: widget.farmer.userType,
-        profilePicturePath: widget.farmer.profilePicturePath,
-        latitude: widget.farmer.latitude,
-        longitude: widget.farmer.longitude,
-        village: widget.farmer.village,
-        coffeeType: _coffeeTypeController.text,
-        quantity: double.tryParse(_quantityController.text),
-        pricePerKg: double.tryParse(_pricePerKgController.text),
-        coffeePicturePath: widget.farmer.coffeePicturePath,
-      );
+  Future<List<CoffeeStock>> _getCoffeeStock() async {
+    return await DatabaseHelper.instance.getCoffeeStock(widget.farmer.id!);
+  }
 
-      await DatabaseHelper.instance.updateUser(updatedFarmer);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Stock updated successfully!')),
-      );
-
-      Navigator.pop(context);
-    }
+  void _showStockDialog({CoffeeStock? stock}) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return _StockDialog(farmerId: widget.farmer.id!, stock: stock);
+      },
+    ).then((_) {
+      setState(() {
+        _stockFuture = _getCoffeeStock();
+      });
+    });
   }
 
   @override
@@ -61,64 +45,143 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       appBar: AppBar(
         title: const Text('Manage Your Coffee Stock'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: <Widget>[
-              TextFormField(
-                controller: _coffeeTypeController,
-                decoration: const InputDecoration(
-                  labelText: 'Coffee Type (e.g., Arabica, Robusta)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the coffee type';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _quantityController,
-                decoration: const InputDecoration(
-                  labelText: 'Quantity (in Kgs)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the quantity';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _pricePerKgController,
-                decoration: const InputDecoration(
-                  labelText: 'Price per Kg (in UGX)',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter the price per Kg';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _saveStock,
-                child: const Text('Save Stock'),
-              ),
-            ],
-          ),
+      body: FutureBuilder<List<CoffeeStock>>(
+        future: _stockFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (snapshot.hasError) {
+            return const Center(child: Text('Error loading stock.'));
+          } else {
+            final stockItems = snapshot.data ?? [];
+            return stockItems.isEmpty
+                ? const Center(child: Text('You have no coffee stock yet.'))
+                : ListView.builder(
+                    itemCount: stockItems.length,
+                    itemBuilder: (context, index) {
+                      final stock = stockItems[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                        child: ListTile(
+                          title: Text(stock.coffeeType),
+                          subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.edit),
+                            onPressed: () => _showStockDialog(stock: stock),
+                          ),
+                        ),
+                      );
+                    },
+                  );
+          }
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showStockDialog(),
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+class _StockDialog extends StatefulWidget {
+  final int farmerId;
+  final CoffeeStock? stock;
+
+  const _StockDialog({required this.farmerId, this.stock});
+
+  @override
+  State<_StockDialog> createState() => _StockDialogState();
+}
+
+class _StockDialogState extends State<_StockDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _coffeeTypeController;
+  late TextEditingController _quantityController;
+  late TextEditingController _pricePerKgController;
+
+  @override
+  void initState() {
+    super.initState();
+    _coffeeTypeController = TextEditingController(text: widget.stock?.coffeeType);
+    _quantityController = TextEditingController(text: widget.stock?.quantity.toString());
+    _pricePerKgController = TextEditingController(text: widget.stock?.pricePerKg.toString());
+  }
+
+  Future<void> _saveStock() async {
+    if (_formKey.currentState!.validate()) {
+      final newStock = CoffeeStock(
+        id: widget.stock?.id,
+        farmerId: widget.farmerId,
+        coffeeType: _coffeeTypeController.text,
+        quantity: double.parse(_quantityController.text),
+        pricePerKg: double.parse(_pricePerKgController.text),
+      );
+
+      if (widget.stock == null) {
+        await DatabaseHelper.instance.insertCoffeeStock(newStock);
+      } else {
+        await DatabaseHelper.instance.updateCoffeeStock(newStock);
+      }
+
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.stock == null ? 'Add Coffee Stock' : 'Edit Coffee Stock'),
+      content: Form(
+        key: _formKey,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: _coffeeTypeController,
+              decoration: const InputDecoration(labelText: 'Coffee Type'),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter the coffee type';
+                }
+                return null;
+              },
+            ),
+            TextFormField(
+              controller: _quantityController,
+              decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter the quantity';
+                }
+                return null;
+              },
+            ),
+            TextFormField(
+              controller: _pricePerKgController,
+              decoration: const InputDecoration(labelText: 'Price per Kg (in UGX)'),
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter the price per Kg';
+                }
+                return null;
+              },
+            ),
+          ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _saveStock,
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
