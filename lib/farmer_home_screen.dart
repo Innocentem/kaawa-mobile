@@ -263,6 +263,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                             ],
                                           ),
                                         ),
+                                        const Spacer(),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                                           children: [

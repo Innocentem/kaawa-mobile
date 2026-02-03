@@ -78,7 +78,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       id: widget.profileOwner.id,
       fullName: _fullNameController.text,
       phoneNumber: _phoneNumberController.text,
-      password: widget.profileOwner.password,
+      password: widget.profileOwner.password, // Keep the existing password
       district: _districtController.text,
       userType: widget.profileOwner.userType,
       profilePicturePath: _profilePicturePath,

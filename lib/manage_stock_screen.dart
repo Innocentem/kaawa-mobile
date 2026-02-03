@@ -1,8 +1,12 @@
 
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class ManageStockScreen extends StatefulWidget {
   final User farmer;
@@ -63,6 +67,9 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         child: ListTile(
+                          leading: stock.coffeePicturePath != null
+                              ? Image.file(File(stock.coffeePicturePath!))
+                              : const Icon(Icons.image, size: 40),
                           title: Text(stock.coffeeType),
                           subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
                           trailing: IconButton(
@@ -99,6 +106,7 @@ class _StockDialogState extends State<_StockDialog> {
   late TextEditingController _coffeeTypeController;
   late TextEditingController _quantityController;
   late TextEditingController _pricePerKgController;
+  String? _coffeePicturePath;
 
   @override
   void initState() {
@@ -106,6 +114,22 @@ class _StockDialogState extends State<_StockDialog> {
     _coffeeTypeController = TextEditingController(text: widget.stock?.coffeeType);
     _quantityController = TextEditingController(text: widget.stock?.quantity.toString());
     _pricePerKgController = TextEditingController(text: widget.stock?.pricePerKg.toString());
+    _coffeePicturePath = widget.stock?.coffeePicturePath;
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: source);
+
+    if (pickedFile != null) {
+      final appDir = await getApplicationDocumentsDirectory();
+      final fileName = p.basename(pickedFile.path);
+      final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
+
+      setState(() {
+        _coffeePicturePath = savedImage.path;
+      });
+    }
   }
 
   Future<void> _saveStock() async {
@@ -116,6 +140,7 @@ class _StockDialogState extends State<_StockDialog> {
         coffeeType: _coffeeTypeController.text,
         quantity: double.parse(_quantityController.text),
         pricePerKg: double.parse(_pricePerKgController.text),
+        coffeePicturePath: _coffeePicturePath,
       );
 
       if (widget.stock == null) {
@@ -169,6 +194,8 @@ class _StockDialogState extends State<_StockDialog> {
                 return null;
               },
             ),
+            const SizedBox(height: 16),
+            _buildImagePicker(),
           ],
         ),
       ),
@@ -180,6 +207,23 @@ class _StockDialogState extends State<_StockDialog> {
         ElevatedButton(
           onPressed: _saveStock,
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildImagePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Coffee Picture', style: TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 8),
+        if (_coffeePicturePath != null)
+          Image.file(File(_coffeePicturePath!), height: 150),
+        TextButton.icon(
+          icon: const Icon(Icons.image),
+          label: Text(_coffeePicturePath == null ? 'Select Image' : 'Change Image'),
+          onPressed: () => _pickImage(ImageSource.gallery),
         ),
       ],
     );

@@ -5,6 +5,7 @@ class CoffeeStock {
   final String coffeeType;
   final double quantity;
   final double pricePerKg;
+  final String? coffeePicturePath;
 
   CoffeeStock({
     this.id,
@@ -12,6 +13,7 @@ class CoffeeStock {
     required this.coffeeType,
     required this.quantity,
     required this.pricePerKg,
+    this.coffeePicturePath,
   });
 
   Map<String, dynamic> toMap() {
@@ -21,6 +23,7 @@ class CoffeeStock {
       'coffeeType': coffeeType,
       'quantity': quantity,
       'pricePerKg': pricePerKg,
+      'coffeePicturePath': coffeePicturePath,
     };
   }
 
@@ -31,6 +34,7 @@ class CoffeeStock {
       coffeeType: map['coffeeType'],
       quantity: map['quantity'],
       pricePerKg: map['pricePerKg'],
+      coffeePicturePath: map['coffeePicturePath'],
     );
   }
 }

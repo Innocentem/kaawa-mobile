@@ -194,7 +194,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                 crossAxisCount: 2,
                                 crossAxisSpacing: 16,
                                 mainAxisSpacing: 16,
-                                childAspectRatio: 0.75,
+                                childAspectRatio: 0.6,
                               ),
                               itemCount: _filteredFarmers.length,
                               itemBuilder: (context, index) {
@@ -228,14 +228,11 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                       children: [
                                         AspectRatio(
                                           aspectRatio: 1,
-                                          child: CircleAvatar(
-                                            radius: 30,
-                                            backgroundImage: farmer.profilePicturePath != null
-                                                ? FileImage(File(farmer.profilePicturePath!))
-                                                : null,
-                                            child: farmer.profilePicturePath == null
-                                                ? const Icon(Icons.person, size: 30)
-                                                : null,
+                                          child: ClipRRect(
+                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                                            child: farmer.profilePicturePath != null
+                                                ? Image.file(File(farmer.profilePicturePath!), fit: BoxFit.cover)
+                                                : const Icon(Icons.person, size: 50),
                                           ),
                                         ),
                                         Padding(
@@ -243,27 +240,29 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                           child: Column(
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                              Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                               const SizedBox(height: 4),
-                                              Text('District: ${farmer.district}'),
+                                              Text('District: ${farmer.district}', overflow: TextOverflow.ellipsis),
                                               if (distance != null)
-                                                Text('${distance.toStringAsFixed(1)} km away'),
+                                                Text('${distance.toStringAsFixed(1)} km away', overflow: TextOverflow.ellipsis),
                                             ],
                                           ),
                                         ),
+                                        const Spacer(),
                                         FutureBuilder<List<CoffeeStock>>(
                                           future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
                                           builder: (context, snapshot) {
                                             if (snapshot.hasData && snapshot.data!.isNotEmpty) {
                                               return Padding(
                                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                child: Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}'),
+                                                child: Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}', overflow: TextOverflow.ellipsis, maxLines: 2),
                                               );
                                             } else {
                                               return const SizedBox.shrink();
                                             }
                                           },
                                         ),
+                                        const Spacer(),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                                           children: [
