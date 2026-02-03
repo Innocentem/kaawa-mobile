@@ -8,6 +8,7 @@ import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   final User buyer;
@@ -250,11 +251,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             ],
                                           ),
                                         ),
-                                        if (farmer.coffeePicturePath != null)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 8.0),
-                                            child: Image.file(File(farmer.coffeePicturePath!)),
-                                          ),
+                                        FutureBuilder<List<CoffeeStock>>(
+                                          future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
+                                          builder: (context, snapshot) {
+                                            if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                                              return Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                child: Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}'),
+                                              );
+                                            } else {
+                                              return const SizedBox.shrink();
+                                            }
+                                          },
+                                        ),
                                         Row(
                                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                                           children: [

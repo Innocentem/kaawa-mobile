@@ -21,7 +21,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    return await openDatabase(path, version: 12, onCreate: _createDb, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 13, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -93,13 +93,10 @@ class DatabaseHelper {
 
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 11) {
+    if (oldVersion < 13) {
       await db.execute('CREATE TABLE users_temp AS SELECT id, fullName, phoneNumber, district, password, userType, profilePicturePath, latitude, longitude, village FROM users');
       await db.execute('DROP TABLE users');
       await db.execute('ALTER TABLE users_temp RENAME TO users');
-    }
-    if (oldVersion < 12) {
-      await _createCoffeeStockTable(db);
     }
   }
 

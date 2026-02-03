@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/manage_stock_screen.dart';
 import 'package:kaawa_mobile/write_review_screen.dart';
 import 'package:kaawa_mobile/view_reviews_screen.dart';
 import 'package:path/path.dart' as p;
@@ -27,12 +28,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _phoneNumberController;
   late TextEditingController _districtController;
   late TextEditingController _villageController;
-  late TextEditingController _coffeeTypeController;
-  late TextEditingController _quantityController;
-  late TextEditingController _pricePerKgController;
-  late TextEditingController _coffeeTypeSoughtController;
   String? _profilePicturePath;
-  String? _coffeePicturePath;
 
   bool get _isOwnProfile => widget.currentUser.id == widget.profileOwner.id;
 
@@ -47,12 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _phoneNumberController = TextEditingController(text: user.phoneNumber);
     _districtController = TextEditingController(text: user.district);
     _villageController = TextEditingController(text: user.village);
-    _coffeeTypeController = TextEditingController(text: user.coffeeType);
-    _quantityController = TextEditingController(text: user.quantity?.toString());
-    _pricePerKgController = TextEditingController(text: user.pricePerKg?.toString());
-    _coffeeTypeSoughtController = TextEditingController(text: user.coffeeTypeSought);
     _profilePicturePath = user.profilePicturePath;
-    _coffeePicturePath = user.coffeePicturePath;
   }
 
   void _toggleEditing() {
@@ -60,13 +51,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _isEditing = !_isEditing;
       if (!_isEditing) {
-        // If cancelling edit, reset the controllers to the original user data
         _initializeControllers(widget.profileOwner);
       }
     });
   }
 
-  Future<void> _pickImage(ImageSource source, {bool isProfilePic = true}) async {
+  Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source);
 
@@ -76,11 +66,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
 
       setState(() {
-        if (isProfilePic) {
-          _profilePicturePath = savedImage.path;
-        } else {
-          _coffeePicturePath = savedImage.path;
-        }
+        _profilePicturePath = savedImage.path;
       });
     }
   }
@@ -92,18 +78,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       id: widget.profileOwner.id,
       fullName: _fullNameController.text,
       phoneNumber: _phoneNumberController.text,
-      password: widget.profileOwner.password, // Keep the existing password
+      password: widget.profileOwner.password,
       district: _districtController.text,
       userType: widget.profileOwner.userType,
       profilePicturePath: _profilePicturePath,
-      latitude: widget.profileOwner.latitude, // Latitude and longitude are not editable in this screen
+      latitude: widget.profileOwner.latitude,
       longitude: widget.profileOwner.longitude,
       village: _villageController.text,
-      coffeeType: _coffeeTypeController.text.isEmpty ? null : _coffeeTypeController.text,
-      quantity: double.tryParse(_quantityController.text),
-      pricePerKg: double.tryParse(_pricePerKgController.text),
-      coffeePicturePath: _coffeePicturePath,
-      coffeeTypeSought: _coffeeTypeSoughtController.text.isEmpty ? null : _coffeeTypeSoughtController.text,
     );
 
     await DatabaseHelper.instance.updateUser(updatedUser);
@@ -154,7 +135,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         right: 0,
                         child: IconButton(
                           icon: const Icon(Icons.camera_alt),
-                          onPressed: () => _pickImage(ImageSource.gallery, isProfilePic: true),
+                          onPressed: () => _pickImage(ImageSource.gallery),
                         ),
                       ),
                   ],
@@ -165,11 +146,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               _buildTextField(_phoneNumberController, 'Phone Number', isEnabled: _isEditing, keyboardType: TextInputType.phone),
               _buildTextField(_districtController, 'District', isEnabled: _isEditing),
               if (widget.profileOwner.userType == UserType.farmer) ..._farmerFields,
-              if (widget.profileOwner.userType == UserType.buyer)
-                _buildTextField(_coffeeTypeSoughtController, 'Coffee Type Sought', isEnabled: _isEditing),
               const SizedBox(height: 24),
               if (_isOwnProfile && _isEditing)
                 ElevatedButton(onPressed: _saveChanges, child: const Text('Save Changes')),
+              if (_isOwnProfile && widget.profileOwner.userType == UserType.farmer)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: ElevatedButton.icon(
+                      icon: const Icon(Icons.inventory),
+                      label: const Text('Manage Coffee Stock'),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ManageStockScreen(farmer: widget.profileOwner),
+                          ),
+                        );
+                      }),
+                ),
               if (!_isOwnProfile)
                 ElevatedButton(
                   onPressed: () {
@@ -204,7 +198,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, {bool isEnabled = true, TextInputType keyboardType = TextInputType.text, bool isRequired = true}) {
+  Widget _buildTextField(TextEditingController controller, String label, {bool isEnabled = true, TextInputType keyboardType = TextInputType.text}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: TextFormField(
@@ -218,7 +212,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         readOnly: !isEnabled,
         keyboardType: keyboardType,
         validator: (value) {
-          if (isRequired && (value == null || value.isEmpty)) {
+          if (value == null || value.isEmpty) {
             return 'Please enter $label';
           }
           return null;
@@ -230,37 +224,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<Widget> get _farmerFields {
     return [
       _buildTextField(_villageController, 'Village', isEnabled: _isEditing),
-      _buildTextField(_coffeeTypeController, 'Coffee Type', isEnabled: _isEditing, isRequired: false),
-      _buildTextField(_quantityController, 'Quantity (in Kgs)', isEnabled: _isEditing, keyboardType: TextInputType.number, isRequired: false),
-      _buildTextField(_pricePerKgController, 'Price per Kg (in UGX)', isEnabled: _isEditing, keyboardType: TextInputType.number, isRequired: false),
-      if (_isEditing)
-        _buildImagePicker(isProfilePic: false, label: 'Coffee Picture'),
-      if (!_isEditing && _coffeePicturePath != null)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0),
-          child: Image.file(File(_coffeePicturePath!)),
-        ),
     ];
-  }
-
-  Widget _buildImagePicker({required bool isProfilePic, required String label}) {
-    final imagePath = isProfilePic ? _profilePicturePath : _coffeePicturePath;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          if (imagePath != null)
-            Image.file(File(imagePath), height: 150),
-          TextButton.icon(
-            icon: const Icon(Icons.image),
-            label: Text(imagePath == null ? 'Select Image' : 'Change Image'),
-            onPressed: () => _pickImage(ImageSource.gallery, isProfilePic: isProfilePic),
-          ),
-        ],
-      ),
-    );
   }
 }
