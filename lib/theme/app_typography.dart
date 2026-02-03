@@ -3,9 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Typography system for Kaawa Mobile with modern, readable fonts
 class AppTypography {
-  // Font families
-  static const String primaryFontFamily = 'Poppins'; // Modern, clean
-  static const String secondaryFontFamily = 'Lato'; // Readable for body text
 
   // Display text styles
   static TextStyle displayLarge = GoogleFonts.poppins(
