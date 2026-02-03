@@ -266,13 +266,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                           mainAxisAlignment: MainAxisAlignment.spaceAround,
                                           children: [
                                             IconButton(
-                                              padding: EdgeInsets.zero,
+                                              padding: const EdgeInsets.zero,
                                               constraints: const BoxConstraints(),
                                               icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
                                               onPressed: () => _toggleFavorite(farmer.id!),
                                             ),
                                             IconButton(
-                                              padding: EdgeInsets.zero,
+                                              padding: const EdgeInsets.zero,
                                               constraints: const BoxConstraints(),
                                               icon: const Icon(Icons.message),
                                               onPressed: () {
@@ -288,7 +288,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                               },
                                             ),
                                             IconButton(
-                                              padding: EdgeInsets.zero,
+                                              padding: const EdgeInsets.zero,
                                               constraints: const BoxConstraints(),
                                               icon: const Icon(Icons.phone),
                                               onPressed: () => _makePhoneCall(farmer.phoneNumber),
