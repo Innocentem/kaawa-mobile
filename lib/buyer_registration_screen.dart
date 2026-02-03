@@ -246,8 +246,4 @@ class _BuyerRegistrationScreenState extends State<BuyerRegistrationScreen> {
       ),
     );
   }
-        ),
-      ),
-    );
-  }
 }
