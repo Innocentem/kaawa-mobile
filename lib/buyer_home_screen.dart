@@ -467,17 +467,4 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> {
       ),
     );
   }
-                                ),
-                              );
-                            },
-                          );
-                  }
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
