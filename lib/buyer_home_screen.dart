@@ -239,7 +239,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                           child: Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: Column(
-                                              mainAxisSize: MainAxisSize.min,
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
                                                 Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
@@ -252,7 +251,12 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                   future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
                                                   builder: (context, snapshot) {
                                                     if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                                                      return Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis, maxLines: 2);
+                                                      return Text(
+                                                        'Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}',
+                                                        style: const TextStyle(fontSize: 12),
+                                                        overflow: TextOverflow.ellipsis,
+                                                        maxLines: 2,
+                                                      );
                                                     } else {
                                                       return const SizedBox.shrink();
                                                     }
