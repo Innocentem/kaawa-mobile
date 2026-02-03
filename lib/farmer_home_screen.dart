@@ -235,63 +235,65 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                         ),
                                       );
                                     },
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        AspectRatio(
-                                          aspectRatio: 1,
-                                          child: CircleAvatar(
-                                            radius: 30,
-                                            backgroundImage: buyer.profilePicturePath != null
-                                                ? FileImage(File(buyer.profilePicturePath!))
-                                                : null,
-                                            child: buyer.profilePicturePath == null
-                                                ? const Icon(Icons.person, size: 30)
-                                                : null,
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          AspectRatio(
+                                            aspectRatio: 1,
+                                            child: CircleAvatar(
+                                              radius: 30,
+                                              backgroundImage: buyer.profilePicturePath != null
+                                                  ? FileImage(File(buyer.profilePicturePath!))
+                                                  : null,
+                                              child: buyer.profilePicturePath == null
+                                                  ? const Icon(Icons.person, size: 30)
+                                                  : null,
+                                            ),
                                           ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                          Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(buyer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                                const SizedBox(height: 4),
+                                                Text('District: ${buyer.district}'),
+                                                if (distance != null)
+                                                  Text('${distance.toStringAsFixed(1)} km away'),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceAround,
                                             children: [
-                                              Text(buyer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                              const SizedBox(height: 4),
-                                              Text('District: ${buyer.district}'),
-                                              if (distance != null)
-                                                Text('${distance.toStringAsFixed(1)} km away'),
+                                              IconButton(
+                                                icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
+                                                onPressed: () => _toggleFavorite(buyer.id!),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.message),
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) => ChatScreen(
+                                                        currentUser: widget.farmer,
+                                                        otherUser: buyer,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.phone),
+                                                onPressed: () => _makePhoneCall(buyer.phoneNumber),
+                                              ),
                                             ],
                                           ),
-                                        ),
-                                        const Spacer(),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                          children: [
-                                            IconButton(
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
-                                              onPressed: () => _toggleFavorite(buyer.id!),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.message),
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => ChatScreen(
-                                                      currentUser: widget.farmer,
-                                                      otherUser: buyer,
-                                                    ),
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.phone),
-                                              onPressed: () => _makePhoneCall(buyer.phoneNumber),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );

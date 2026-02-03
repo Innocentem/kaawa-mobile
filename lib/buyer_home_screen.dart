@@ -223,96 +223,76 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                         ),
                                       );
                                     },
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        AspectRatio(
-                                          aspectRatio: 1,
-                                          child: ClipRRect(
-                                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                            child: farmer.profilePicturePath != null
-                                                ? Image.file(File(farmer.profilePicturePath!), fit: BoxFit.cover)
-                                                : const Icon(Icons.person, size: 50),
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          AspectRatio(
+                                            aspectRatio: 1,
+                                            child: ClipRRect(
+                                              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                                              child: farmer.profilePicturePath != null
+                                                  ? Image.file(File(farmer.profilePicturePath!), fit: BoxFit.cover)
+                                                  : const Icon(Icons.person, size: 50),
+                                            ),
                                           ),
-                                        ),
-                                        Expanded(
-                                          child: Padding(
+                                          Padding(
                                             padding: const EdgeInsets.all(8.0),
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(
-                                                  farmer.fullName,
-                                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                                  overflow: TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
+                                                Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                                 const SizedBox(height: 4),
-                                                Text(
-                                                  'District: ${farmer.district}',
-                                                  overflow: TextOverflow.ellipsis,
-                                                  maxLines: 1,
-                                                ),
+                                                Text('District: ${farmer.district}', overflow: TextOverflow.ellipsis),
                                                 if (distance != null)
-                                                  Text(
-                                                    '${distance.toStringAsFixed(1)} km away',
-                                                    overflow: TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                const Spacer(),
-                                                FutureBuilder<List<CoffeeStock>>(
-                                                  future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
-                                                  builder: (context, snapshot) {
-                                                    if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                                                      return Text(
-                                                        'Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}',
-                                                        style: const TextStyle(fontSize: 12),
-                                                        overflow: TextOverflow.ellipsis,
-                                                        maxLines: 2,
-                                                      );
-                                                    } else {
-                                                      return const SizedBox.shrink();
-                                                    }
-                                                  },
-                                                ),
+                                                  Text('${distance.toStringAsFixed(1)} km away', overflow: TextOverflow.ellipsis),
                                               ],
                                             ),
                                           ),
-                                        ),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                          children: [
-                                            IconButton(
-                                              padding: const EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
-                                              onPressed: () => _toggleFavorite(farmer.id!),
-                                            ),
-                                            IconButton(
-                                              padding: const EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                              icon: const Icon(Icons.message),
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => ChatScreen(
-                                                      currentUser: widget.buyer,
-                                                      otherUser: farmer,
-                                                    ),
-                                                  ),
+                                          const SizedBox(height: 8),
+                                          FutureBuilder<List<CoffeeStock>>(
+                                            future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
+                                            builder: (context, snapshot) {
+                                              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
+                                                return Padding(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                  child: Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}', overflow: TextOverflow.ellipsis, maxLines: 2),
                                                 );
-                                              },
-                                            ),
-                                            IconButton(
-                                              padding: const EdgeInsets.zero,
-                                              constraints: const BoxConstraints(),
-                                              icon: const Icon(Icons.phone),
-                                              onPressed: () => _makePhoneCall(farmer.phoneNumber),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                              } else {
+                                                return const SizedBox.shrink();
+                                              }
+                                            },
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                            children: [
+                                              IconButton(
+                                                icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
+                                                onPressed: () => _toggleFavorite(farmer.id!),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.message),
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) => ChatScreen(
+                                                        currentUser: widget.buyer,
+                                                        otherUser: farmer,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.phone),
+                                                onPressed: () => _makePhoneCall(farmer.phoneNumber),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 );
