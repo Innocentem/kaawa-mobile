@@ -241,11 +241,24 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                                Text(
+                                                  farmer.fullName,
+                                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
                                                 const SizedBox(height: 4),
-                                                Text('District: ${farmer.district}', overflow: TextOverflow.ellipsis),
+                                                Text(
+                                                  'District: ${farmer.district}',
+                                                  overflow: TextOverflow.ellipsis,
+                                                  maxLines: 1,
+                                                ),
                                                 if (distance != null)
-                                                  Text('${distance.toStringAsFixed(1)} km away', overflow: TextOverflow.ellipsis),
+                                                  Text(
+                                                    '${distance.toStringAsFixed(1)} km away',
+                                                    overflow: TextOverflow.ellipsis,
+                                                    maxLines: 1,
+                                                  ),
                                                 const Spacer(),
                                                 FutureBuilder<List<CoffeeStock>>(
                                                   future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
