@@ -3,9 +3,16 @@ import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/farmer_registration_screen.dart';
 import 'package:kaawa_mobile/buyer_registration_screen.dart';
 import 'package:kaawa_mobile/login_screen.dart';
+import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => ThemeNotifier(),
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -13,14 +20,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Kaawa Mobile',
-      theme: ThemeData(
-        primarySwatch: Colors.brown,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+    return Consumer<ThemeNotifier>(
+      builder: (context, theme, child) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Kaawa Mobile',
+        theme: ThemeData(
+          primarySwatch: Colors.brown,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        darkTheme: ThemeData.dark(),
+        themeMode: theme.themeMode,
+        home: const WelcomeScreen(),
       ),
-      home: const WelcomeScreen(),
     );
   }
 }
@@ -48,7 +59,7 @@ class WelcomeScreen extends StatelessWidget {
               },
             ),
             const SizedBox(height: 24),
-            const Text('Don\'t have an account?'),
+            const Text("Don't have an account?"),
             const SizedBox(height: 8),
             ElevatedButton(
               child: const Text('Register as a Farmer'),

@@ -8,6 +8,8 @@ import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/manage_stock_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
+import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
@@ -128,6 +130,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
       appBar: AppBar(
         title: Text('Welcome, ${widget.farmer.fullName}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.brightness_6),
+            onPressed: () {
+              Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.star),
             onPressed: () {

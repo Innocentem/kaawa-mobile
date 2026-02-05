@@ -7,6 +7,8 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
+import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 
@@ -128,6 +130,12 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       appBar: AppBar(
         title: Text('Welcome, ${widget.buyer.fullName}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.brightness_6),
+            onPressed: () {
+              Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.star),
             onPressed: () {
