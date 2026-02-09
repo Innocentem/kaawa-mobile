@@ -40,7 +40,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            return const Center(child: Text('Error loading conversations.'));
+            return Center(child: Text('Error loading conversations: ${snapshot.error}'));
           } else {
             final conversations = snapshot.data ?? [];
             return conversations.isEmpty

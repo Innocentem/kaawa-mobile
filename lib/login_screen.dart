@@ -2,6 +2,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:kaawa_mobile/auth_service.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/farmer_home_screen.dart';
 import 'package:kaawa_mobile/buyer_home_screen.dart';
@@ -18,6 +19,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneNumberController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _keepLoggedIn = false;
+  final AuthService _authService = AuthService();
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +56,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   return null;
                 },
               ),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _keepLoggedIn,
+                    onChanged: (value) {
+                      setState(() {
+                        _keepLoggedIn = value!;
+                      });
+                    },
+                  ),
+                  const Text('Keep me logged in'),
+                ],
+              ),
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: () async {
@@ -63,6 +79,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (user != null) {
                       final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
                       if (user.password == hashedPassword) {
+                        if (_keepLoggedIn) {
+                          await _authService.login(user.id!);
+                        }
                         // Navigate to the correct home screen based on user type
                         if (user.userType == UserType.farmer) {
                           Navigator.pushReplacement(

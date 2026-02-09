@@ -2,11 +2,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:kaawa_mobile/auth_service.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/conversations_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
+import 'package:kaawa_mobile/welcome_screen.dart';
 import 'package:kaawa_mobile/manage_stock_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
@@ -31,6 +33,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -134,6 +137,15 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     }
   }
 
+  Future<void> _logout() async {
+    await _authService.logout();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -195,6 +207,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
           ),
         ],
       ),

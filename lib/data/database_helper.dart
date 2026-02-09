@@ -205,31 +205,38 @@ class DatabaseHelper {
 
   Future<List<Conversation>> getConversations(int userId) async {
     final db = await instance.database;
-    final result = await db.rawQuery('''
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
       SELECT
-        u.*,
+        m.id,
+        m.senderId,
+        m.receiverId,
         m.text,
         m.timestamp,
         m.isRead,
         m.coffeeStockId
-      FROM users u
-      INNER JOIN messages m ON u.id = m.senderId OR u.id = m.receiverId
-      WHERE m.id IN (
-        SELECT MAX(id) FROM messages WHERE senderId = ? OR receiverId = ? GROUP BY IIF(senderId = ?, receiverId, senderId)
-      ) AND u.id != ?
+      FROM messages m
+      INNER JOIN (
+        SELECT
+          IIF(senderId = ?, receiverId, senderId) as otherUserId,
+          MAX(timestamp) as maxTimestamp
+        FROM messages
+        WHERE senderId = ? OR receiverId = ?
+        GROUP BY otherUserId
+      ) as last_message ON (IIF(m.senderId = ?, m.receiverId, m.senderId) = last_message.otherUserId AND m.timestamp = last_message.maxTimestamp)
       ORDER BY m.timestamp DESC
     ''', [userId, userId, userId, userId]);
 
     final conversations = <Conversation>[];
-    for (final map in result) {
-      final otherUser = User.fromMap(map);
+    for (final map in maps) {
       final lastMessage = Message.fromMap(map);
+      final otherUserId = lastMessage.senderId == userId ? lastMessage.receiverId : lastMessage.senderId;
+      final otherUser = await getUserById(otherUserId);
       CoffeeStock? coffeeStock;
       if (lastMessage.coffeeStockId != null) {
         coffeeStock = await getCoffeeStockById(lastMessage.coffeeStockId!);
       }
       conversations.add(Conversation(
-        otherUser: otherUser,
+        otherUser: otherUser!,
         lastMessage: lastMessage,
         coffeeStock: coffeeStock,
       ));

@@ -1,10 +1,12 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:kaawa_mobile/auth_service.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/conversations_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/welcome_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +29,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -82,6 +85,15 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         SnackBar(content: Text('Could not launch dialer for $phoneNumber')),
       );
     }
+  }
+
+  Future<void> _logout() async {
+    await _authService.logout();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -145,6 +157,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                 ),
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
           ),
         ],
       ),
