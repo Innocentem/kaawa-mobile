@@ -43,45 +43,83 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
     });
   }
 
+  Future<void> _toggleSoldStatus(CoffeeStock stock) async {
+    final newStock = CoffeeStock(
+      id: stock.id,
+      farmerId: stock.farmerId,
+      coffeeType: stock.coffeeType,
+      quantity: stock.quantity,
+      pricePerKg: stock.pricePerKg,
+      coffeePicturePath: stock.coffeePicturePath,
+      isSold: !stock.isSold,
+    );
+    await DatabaseHelper.instance.updateCoffeeStock(newStock);
+    setState(() {
+      _stockFuture = _getCoffeeStock();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Your Coffee Stock'),
       ),
-      body: FutureBuilder<List<CoffeeStock>>(
-        future: _stockFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return const Center(child: Text('Error loading stock.'));
-          } else {
-            final stockItems = snapshot.data ?? [];
-            return stockItems.isEmpty
-                ? const Center(child: Text('You have no coffee stock yet.'))
-                : ListView.builder(
-                    itemCount: stockItems.length,
-                    itemBuilder: (context, index) {
-                      final stock = stockItems[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                        child: ListTile(
-                          leading: stock.coffeePicturePath != null
-                              ? Image.file(File(stock.coffeePicturePath!))
-                              : const Icon(Icons.image, size: 40),
-                          title: Text(stock.coffeeType),
-                          subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
-                          trailing: IconButton(
-                            icon: const Icon(Icons.edit),
-                            onPressed: () => _showStockDialog(stock: stock),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-          }
-        },
+      body: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text(
+              'Use the pencil icon to edit a listing, and the checkmark icon to mark it as sold.',
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<CoffeeStock>>(
+              future: _stockFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (snapshot.hasError) {
+                  return const Center(child: Text('Error loading stock.'));
+                } else {
+                  final stockItems = snapshot.data ?? [];
+                  return stockItems.isEmpty
+                      ? const Center(child: Text('You have no coffee stock yet.'))
+                      : ListView.builder(
+                          itemCount: stockItems.length,
+                          itemBuilder: (context, index) {
+                            final stock = stockItems[index];
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                              child: ListTile(
+                                leading: stock.coffeePicturePath != null
+                                    ? Image.file(File(stock.coffeePicturePath!))
+                                    : const Icon(Icons.image, size: 40),
+                                title: Text(stock.coffeeType),
+                                subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      onPressed: () => _showStockDialog(stock: stock),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(stock.isSold ? Icons.undo : Icons.check),
+                                      onPressed: () => _toggleSoldStatus(stock),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                }
+              },
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showStockDialog(),

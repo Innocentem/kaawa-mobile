@@ -5,6 +5,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/message_data.dart';
 import 'package:kaawa_mobile/data/review_data.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
+import 'package:kaawa_mobile/data/conversation_data.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -21,7 +22,7 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    return await openDatabase(path, version: 14, onCreate: _createDb, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 17, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -52,7 +53,9 @@ class DatabaseHelper {
         senderId INTEGER NOT NULL,
         receiverId INTEGER NOT NULL,
         text TEXT NOT NULL,
-        timestamp TEXT NOT NULL
+        timestamp TEXT NOT NULL,
+        isRead INTEGER NOT NULL DEFAULT 0,
+        coffeeStockId INTEGER
       )
     ''');
   }
@@ -87,7 +90,8 @@ class DatabaseHelper {
         coffeeType TEXT NOT NULL,
         quantity REAL NOT NULL,
         pricePerKg REAL NOT NULL,
-        coffeePicturePath TEXT
+        coffeePicturePath TEXT,
+        isSold INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -102,6 +106,15 @@ class DatabaseHelper {
     if (oldVersion < 14) {
       await db.execute('ALTER TABLE coffee_stock ADD COLUMN coffeePicturePath TEXT');
     }
+    if (oldVersion < 15) {
+      await db.execute('ALTER TABLE coffee_stock ADD COLUMN isSold INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 16) {
+      await db.execute('ALTER TABLE messages ADD COLUMN isRead INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 17) {
+      await db.execute('ALTER TABLE messages ADD COLUMN coffeeStockId INTEGER');
+    }
   }
 
   Future<int> insertUser(User user) async {
@@ -115,6 +128,21 @@ class DatabaseHelper {
       'users',
       where: 'phoneNumber = ?',
       whereArgs: [phoneNumber],
+    );
+
+    if (maps.isNotEmpty) {
+      return User.fromMap(maps.first);
+    } else {
+      return null;
+    }
+  }
+
+  Future<User?> getUserById(int id) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'users',
+      where: 'id = ?',
+      whereArgs: [id],
     );
 
     if (maps.isNotEmpty) {
@@ -154,6 +182,59 @@ class DatabaseHelper {
       orderBy: 'timestamp ASC',
     );
     return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
+  Future<void> markMessagesAsRead(int receiverId, int senderId) async {
+    final db = await instance.database;
+    await db.update(
+      'messages',
+      {'isRead': 1},
+      where: 'receiverId = ? AND senderId = ?',
+      whereArgs: [receiverId, senderId],
+    );
+  }
+
+  Future<int> getUnreadMessageCount(int receiverId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) FROM messages WHERE receiverId = ? AND isRead = 0',
+      [receiverId],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<List<Conversation>> getConversations(int userId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT
+        u.*,
+        m.text,
+        m.timestamp,
+        m.isRead,
+        m.coffeeStockId
+      FROM users u
+      INNER JOIN messages m ON u.id = m.senderId OR u.id = m.receiverId
+      WHERE m.id IN (
+        SELECT MAX(id) FROM messages WHERE senderId = ? OR receiverId = ? GROUP BY IIF(senderId = ?, receiverId, senderId)
+      ) AND u.id != ?
+      ORDER BY m.timestamp DESC
+    ''', [userId, userId, userId, userId]);
+
+    final conversations = <Conversation>[];
+    for (final map in result) {
+      final otherUser = User.fromMap(map);
+      final lastMessage = Message.fromMap(map);
+      CoffeeStock? coffeeStock;
+      if (lastMessage.coffeeStockId != null) {
+        coffeeStock = await getCoffeeStockById(lastMessage.coffeeStockId!);
+      }
+      conversations.add(Conversation(
+        otherUser: otherUser,
+        lastMessage: lastMessage,
+        coffeeStock: coffeeStock,
+      ));
+    }
+    return conversations;
   }
 
     Future<int> insertReview(Review review) async {
@@ -215,9 +296,30 @@ class DatabaseHelper {
     );
   }
 
+  Future<CoffeeStock?> getCoffeeStockById(int id) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'coffee_stock',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+
+    if (maps.isNotEmpty) {
+      return CoffeeStock.fromMap(maps.first);
+    } else {
+      return null;
+    }
+  }
+
   Future<List<CoffeeStock>> getCoffeeStock(int farmerId) async {
     final db = await instance.database;
     final maps = await db.query('coffee_stock', where: 'farmerId = ?', whereArgs: [farmerId]);
+    return maps.map((map) => CoffeeStock.fromMap(map)).toList();
+  }
+
+  Future<List<CoffeeStock>> getAllCoffeeStock() async {
+    final db = await instance.database;
+    final maps = await db.query('coffee_stock', where: 'isSold = 0');
     return maps.map((map) => CoffeeStock.fromMap(map)).toList();
   }
 }

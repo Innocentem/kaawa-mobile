@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/message_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
@@ -8,8 +9,16 @@ import 'package:intl/intl.dart';
 class ChatScreen extends StatefulWidget {
   final User currentUser;
   final User otherUser;
+  final String? initialMessage;
+  final CoffeeStock? coffeeStock;
 
-  const ChatScreen({super.key, required this.currentUser, required this.otherUser});
+  const ChatScreen({
+    super.key,
+    required this.currentUser,
+    required this.otherUser,
+    this.initialMessage,
+    this.coffeeStock,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -18,15 +27,31 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   late Future<List<Message>> _messagesFuture;
+  CoffeeStock? _coffeeStock;
 
   @override
   void initState() {
     super.initState();
+    _coffeeStock = widget.coffeeStock;
     _messagesFuture = _getMessages();
+    if (widget.initialMessage != null) {
+      _messageController.text = widget.initialMessage!;
+    }
+    DatabaseHelper.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
   }
 
   Future<List<Message>> _getMessages() async {
-    return await DatabaseHelper.instance.getMessages(widget.currentUser.id!, widget.otherUser.id!);
+    final messages = await DatabaseHelper.instance.getMessages(widget.currentUser.id!, widget.otherUser.id!);
+    if (_coffeeStock == null && messages.isNotEmpty) {
+      final firstMessage = messages.first;
+      if (firstMessage.coffeeStockId != null) {
+        final stock = await DatabaseHelper.instance.getCoffeeStockById(firstMessage.coffeeStockId!);
+        setState(() {
+          _coffeeStock = stock;
+        });
+      }
+    }
+    return messages;
   }
 
   Future<void> _sendMessage() async {
@@ -36,6 +61,7 @@ class _ChatScreenState extends State<ChatScreen> {
         receiverId: widget.otherUser.id!,
         text: _messageController.text,
         timestamp: DateTime.now(),
+        coffeeStockId: _coffeeStock?.id,
       );
 
       await DatabaseHelper.instance.insertMessage(message);
@@ -55,6 +81,24 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          if (_coffeeStock != null)
+            Card(
+              margin: const EdgeInsets.all(8.0),
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Inquiry about: ${_coffeeStock!.coffeeType}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text('${_coffeeStock!.quantity} kg available at UGX ${_coffeeStock!.pricePerKg}/kg'),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: FutureBuilder<List<Message>>(
               future: _messagesFuture,

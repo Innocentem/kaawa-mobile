@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
+import 'package:kaawa_mobile/conversations_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/favorites_screen.dart';
@@ -29,6 +30,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   Set<int> _favoriteUserIds = {};
   late AnimationController _animationController;
   late Animation<double> _animation;
+  int _unreadMessageCount = 0;
 
   @override
   void initState() {
@@ -36,6 +38,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     _buyersFuture = _getBuyers();
     _searchController.addListener(_filterBuyers);
     _loadFavorites();
+    _getUnreadMessageCount();
 
     _animationController = AnimationController(
       vsync: this,
@@ -58,6 +61,13 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     final favorites = await DatabaseHelper.instance.getFavorites(widget.farmer.id!);
     setState(() {
       _favoriteUserIds = favorites.map((user) => user.id!).toSet();
+    });
+  }
+
+  Future<void> _getUnreadMessageCount() async {
+    final count = await DatabaseHelper.instance.getUnreadMessageCount(widget.farmer.id!);
+    setState(() {
+      _unreadMessageCount = count;
     });
   }
 
@@ -136,16 +146,44 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
               Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.star),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FavoritesScreen(currentUser: widget.farmer),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.message),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ConversationsScreen(currentUser: widget.farmer),
+                    ),
+                  ).then((_) => _getUnreadMessageCount());
+                },
+              ),
+              if (_unreadMessageCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '$_unreadMessageCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
-              );
-            },
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.person),
@@ -178,6 +216,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Available Buyers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text(
+              'Tap on a buyer to view their profile. Use the star to mark as favorite, or the message icon to start a conversation.',
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _searchController,

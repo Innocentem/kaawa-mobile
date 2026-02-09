@@ -1,11 +1,10 @@
 
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
+import 'package:kaawa_mobile/conversations_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
@@ -21,21 +20,20 @@ class BuyerHomeScreen extends StatefulWidget {
 }
 
 class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderStateMixin {
-  late Future<List<User>> _farmersFuture;
-  List<User> _allFarmers = [];
-  List<User> _filteredFarmers = [];
+  late Future<List<CoffeeStock>> _coffeeStockFuture;
+  List<CoffeeStock> _allCoffeeStock = [];
+  List<CoffeeStock> _filteredCoffeeStock = [];
   final _searchController = TextEditingController();
-  bool _sortByDistance = false;
-  Set<int> _favoriteUserIds = {};
   late AnimationController _animationController;
   late Animation<double> _animation;
+  int _unreadMessageCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _farmersFuture = _getFarmers();
-    _searchController.addListener(_filterFarmers);
-    _loadFavorites();
+    _coffeeStockFuture = _getCoffeeStock();
+    _searchController.addListener(_filterCoffeeStock);
+    _getUnreadMessageCount();
 
     _animationController = AnimationController(
       vsync: this,
@@ -54,63 +52,25 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     super.dispose();
   }
 
-  Future<void> _loadFavorites() async {
-    final favorites = await DatabaseHelper.instance.getFavorites(widget.buyer.id!);
+  Future<void> _getUnreadMessageCount() async {
+    final count = await DatabaseHelper.instance.getUnreadMessageCount(widget.buyer.id!);
     setState(() {
-      _favoriteUserIds = favorites.map((user) => user.id!).toSet();
+      _unreadMessageCount = count;
     });
   }
 
-  Future<List<User>> _getFarmers() async {
-    final allUsers = await DatabaseHelper.instance.getAllUsers();
-    return allUsers.where((user) => user.userType == UserType.farmer).toList();
+  Future<List<CoffeeStock>> _getCoffeeStock() async {
+    return await DatabaseHelper.instance.getAllCoffeeStock();
   }
 
-  void _filterFarmers() {
+  void _filterCoffeeStock() {
     final query = _searchController.text.toLowerCase();
     setState(() {
-      _filteredFarmers = _allFarmers.where((farmer) {
-        final nameLower = farmer.fullName.toLowerCase();
-        final districtLower = farmer.district.toLowerCase();
-        return nameLower.contains(query) ||
-            districtLower.contains(query);
+      _filteredCoffeeStock = _allCoffeeStock.where((stock) {
+        final coffeeTypeLower = stock.coffeeType.toLowerCase();
+        return coffeeTypeLower.contains(query);
       }).toList();
     });
-  }
-
-  void _toggleSortByDistance() {
-    setState(() {
-      _sortByDistance = !_sortByDistance;
-      if (_sortByDistance) {
-        _filteredFarmers.sort((a, b) {
-          final distanceA = Geolocator.distanceBetween(
-            widget.buyer.latitude!,
-            widget.buyer.longitude!,
-            a.latitude!,
-            a.longitude!,
-          );
-          final distanceB = Geolocator.distanceBetween(
-            widget.buyer.latitude!,
-            widget.buyer.longitude!,
-            b.latitude!,
-            b.longitude!,
-          );
-          return distanceA.compareTo(distanceB);
-        });
-      } else {
-        _filteredFarmers = List.from(_allFarmers);
-        _filterFarmers();
-      }
-    });
-  }
-
-  Future<void> _toggleFavorite(int farmerId) async {
-    if (_favoriteUserIds.contains(farmerId)) {
-      await DatabaseHelper.instance.removeFavorite(widget.buyer.id!, farmerId);
-    } else {
-      await DatabaseHelper.instance.addFavorite(widget.buyer.id!, farmerId);
-    }
-    _loadFavorites();
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {
@@ -136,16 +96,44 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
               Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.star),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => FavoritesScreen(currentUser: widget.buyer),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.message),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ConversationsScreen(currentUser: widget.buyer),
+                    ),
+                  ).then((_) => _getUnreadMessageCount());
+                },
+              ),
+              if (_unreadMessageCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '$_unreadMessageCount',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
                 ),
-              );
-            },
+            ],
           ),
           IconButton(
             icon: const Icon(Icons.person),
@@ -165,38 +153,37 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Available Farmers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const Text('Available Coffee', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text(
+              'Tap on a listing to view farmer details. Use the message icon to inquire or the cart icon to buy.',
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _searchController,
               decoration: const InputDecoration(
-                labelText: 'Search by name or district',
+                labelText: 'Search by coffee type',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.search),
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.sort),
-              label: Text(_sortByDistance ? 'Sort by Name' : 'Sort by Distance'),
-              onPressed: _toggleSortByDistance,
-            ),
-            const SizedBox(height: 16),
             Expanded(
-              child: FutureBuilder<List<User>>(
-                future: _farmersFuture,
+              child: FutureBuilder<List<CoffeeStock>>(
+                future: _coffeeStockFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   } else if (snapshot.hasError) {
-                    return const Center(child: Text('Error loading farmers.'));
+                    return const Center(child: Text('Error loading coffee stock.'));
                   } else {
-                    _allFarmers = snapshot.data ?? [];
-                    _filteredFarmers = List.from(_allFarmers);
+                    _allCoffeeStock = snapshot.data ?? [];
+                    _filteredCoffeeStock = List.from(_allCoffeeStock);
                     return FadeTransition(
                       opacity: _animation,
-                      child: _filteredFarmers.isEmpty && _searchController.text.isNotEmpty
-                          ? const Center(child: Text('No farmers found.'))
+                      child: _filteredCoffeeStock.isEmpty && _searchController.text.isNotEmpty
+                          ? const Center(child: Text('No coffee stock found.'))
                           : GridView.builder(
                               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
@@ -204,30 +191,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                 mainAxisSpacing: 16,
                                 childAspectRatio: 0.6,
                               ),
-                              itemCount: _filteredFarmers.length,
+                              itemCount: _filteredCoffeeStock.length,
                               itemBuilder: (context, index) {
-                                final farmer = _filteredFarmers[index];
-                                final isFavorite = _favoriteUserIds.contains(farmer.id);
-                                final distance = widget.buyer.latitude != null &&
-                                        widget.buyer.longitude != null &&
-                                        farmer.latitude != null &&
-                                        farmer.longitude != null
-                                    ? Geolocator.distanceBetween(
-                                        widget.buyer.latitude!,
-                                        widget.buyer.longitude!,
-                                        farmer.latitude!,
-                                        farmer.longitude!,
-                                      ) / 1000
-                                    : null;
+                                final stock = _filteredCoffeeStock[index];
                                 return Card(
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   child: InkWell(
-                                    onTap: () {
+                                    onTap: () async {
+                                      final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer),
+                                          builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer!),
                                         ),
                                       );
                                     },
@@ -239,9 +215,9 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             aspectRatio: 1,
                                             child: ClipRRect(
                                               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                              child: farmer.profilePicturePath != null
-                                                  ? Image.file(File(farmer.profilePicturePath!), fit: BoxFit.cover)
-                                                  : const Icon(Icons.person, size: 50),
+                                              child: stock.coffeePicturePath != null
+                                                  ? Image.file(File(stock.coffeePicturePath!), fit: BoxFit.cover)
+                                                  : const Icon(Icons.local_cafe, size: 50),
                                             ),
                                           ),
                                           Padding(
@@ -249,53 +225,49 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(farmer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                                Text(stock.coffeeType, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                                 const SizedBox(height: 4),
-                                                Text('District: ${farmer.district}', overflow: TextOverflow.ellipsis),
-                                                if (distance != null)
-                                                  Text('${distance.toStringAsFixed(1)} km away', overflow: TextOverflow.ellipsis),
+                                                Text('${stock.quantity} kg available', overflow: TextOverflow.ellipsis),
+                                                Text('Price: UGX ${stock.pricePerKg}/kg', overflow: TextOverflow.ellipsis),
                                               ],
                                             ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          FutureBuilder<List<CoffeeStock>>(
-                                            future: DatabaseHelper.instance.getCoffeeStock(farmer.id!),
-                                            builder: (context, snapshot) {
-                                              if (snapshot.hasData && snapshot.data!.isNotEmpty) {
-                                                return Padding(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                  child: Text('Available: ${snapshot.data!.map((s) => s.coffeeType).join(', ')}', overflow: TextOverflow.ellipsis, maxLines: 2),
-                                                );
-                                              } else {
-                                                return const SizedBox.shrink();
-                                              }
-                                            },
                                           ),
                                           const SizedBox(height: 8),
                                           Row(
                                             mainAxisAlignment: MainAxisAlignment.spaceAround,
                                             children: [
                                               IconButton(
-                                                icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
-                                                onPressed: () => _toggleFavorite(farmer.id!),
-                                              ),
-                                              IconButton(
                                                 icon: const Icon(Icons.message),
-                                                onPressed: () {
+                                                onPressed: () async {
+                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
                                                   Navigator.push(
                                                     context,
                                                     MaterialPageRoute(
                                                       builder: (context) => ChatScreen(
                                                         currentUser: widget.buyer,
-                                                        otherUser: farmer,
+                                                        otherUser: farmer!,
+                                                        coffeeStock: stock,
                                                       ),
                                                     ),
                                                   );
                                                 },
                                               ),
                                               IconButton(
-                                                icon: const Icon(Icons.phone),
-                                                onPressed: () => _makePhoneCall(farmer.phoneNumber),
+                                                icon: const Icon(Icons.shopping_cart),
+                                                onPressed: () async {
+                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) => ChatScreen(
+                                                        currentUser: widget.buyer,
+                                                        otherUser: farmer!,
+                                                        initialMessage: 'I would like to buy your ${stock.coffeeType}.',
+                                                        coffeeStock: stock,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
                                               ),
                                             ],
                                           ),

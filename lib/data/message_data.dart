@@ -5,6 +5,8 @@ class Message {
   final int receiverId;
   final String text;
   final DateTime timestamp;
+  final bool isRead;
+  final int? coffeeStockId;
 
   Message({
     this.id,
@@ -12,6 +14,8 @@ class Message {
     required this.receiverId,
     required this.text,
     required this.timestamp,
+    this.isRead = false,
+    this.coffeeStockId,
   });
 
   Map<String, dynamic> toMap() {
@@ -21,6 +25,8 @@ class Message {
       'receiverId': receiverId,
       'text': text,
       'timestamp': timestamp.toIso8601String(),
+      'isRead': isRead ? 1 : 0,
+      'coffeeStockId': coffeeStockId,
     };
   }
 
@@ -31,6 +37,8 @@ class Message {
       receiverId: map['receiverId'],
       text: map['text'],
       timestamp: DateTime.parse(map['timestamp']),
+      isRead: map['isRead'] == 1,
+      coffeeStockId: map['coffeeStockId'],
     );
   }
 }
