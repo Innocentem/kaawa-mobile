@@ -23,10 +23,25 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         title: 'Kaawa Mobile',
         theme: ThemeData(
-          primarySwatch: Colors.brown,
+          brightness: Brightness.light,
+          primaryColor: const Color(0xFF8D6E63),
+          scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF8D6E63),
+            secondary: Color(0xFFBCAAA4),
+          ),
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        darkTheme: ThemeData.dark(),
+        darkTheme: ThemeData(
+          brightness: Brightness.dark,
+          primaryColor: const Color(0xFF3E2723),
+          scaffoldBackgroundColor: const Color(0xFF212121),
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF3E2723),
+            secondary: Color(0xFF5D4037),
+          ),
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
         themeMode: theme.themeMode,
         home: const InitialScreen(),
       ),
