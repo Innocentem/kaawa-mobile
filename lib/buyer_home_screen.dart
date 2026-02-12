@@ -1,5 +1,3 @@
-
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/auth_service.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
@@ -12,6 +10,11 @@ import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
+import 'package:kaawa_mobile/data/message_data.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
+import 'package:kaawa_mobile/widgets/listing_image.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/product_detail_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   final User buyer;
@@ -25,6 +28,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   late Future<List<CoffeeStock>> _coffeeStockFuture;
   List<CoffeeStock> _allCoffeeStock = [];
   List<CoffeeStock> _filteredCoffeeStock = [];
+  Set<int> _interestedStockIds = {};
+  final Map<int, int> _interestCounts = {};
   final _searchController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -63,7 +68,17 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   }
 
   Future<List<CoffeeStock>> _getCoffeeStock() async {
-    return await DatabaseHelper.instance.getAllCoffeeStock();
+    final stocks = await DatabaseHelper.instance.getAllCoffeeStock();
+    // preload interest data for the current buyer
+    _interestedStockIds = (await DatabaseHelper.instance.getInterestedStockIdsForBuyer(widget.buyer.id!)).toSet();
+    // preload counts
+    for (final s in stocks) {
+      if (s.id != null) {
+        final c = await DatabaseHelper.instance.getInterestCountForStock(s.id!);
+        _interestCounts[s.id!] = c;
+      }
+    }
+    return stocks;
   }
 
   void _filterCoffeeStock() {
@@ -76,16 +91,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     });
   }
 
-  Future<void> _makePhoneCall(String phoneNumber) async {
-    final Uri launchUri = Uri(scheme: 'tel', path: phoneNumber);
-    if (await canLaunchUrl(launchUri)) {
-      await launchUrl(launchUri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch dialer for $phoneNumber')),
-      );
-    }
-  }
 
   Future<void> _logout() async {
     await _authService.logout();
@@ -98,8 +103,11 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: theme.colorScheme.primary,
         title: Text('Welcome, ${widget.buyer.fullName}'),
         actions: [
           IconButton(
@@ -169,11 +177,11 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Available Coffee', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            Text('Available Coffee', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Tap on a listing to view farmer details. Use the message icon to inquire or the cart icon to buy.',
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -190,7 +198,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                 future: _coffeeStockFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
                   } else if (snapshot.hasError) {
                     return const Center(child: Text('Error loading coffee stock.'));
                   } else {
@@ -210,6 +218,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                               itemCount: _filteredCoffeeStock.length,
                               itemBuilder: (context, index) {
                                 final stock = _filteredCoffeeStock[index];
+                                final stockId = stock.id;
+                                final liked = stockId != null && _interestedStockIds.contains(stockId);
+                                final likeCount = stockId != null ? (_interestCounts[stockId] ?? 0) : 0;
+
                                 return Card(
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -231,9 +243,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             aspectRatio: 1,
                                             child: ClipRRect(
                                               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                              child: stock.coffeePicturePath != null
-                                                  ? Image.file(File(stock.coffeePicturePath!), fit: BoxFit.cover)
-                                                  : const Icon(Icons.local_cafe, size: 50),
+                                              child: GestureDetector(
+                                                onTap: () async {
+                                                  // fetch farmer and open product detail (pass current buyer as currentUser)
+                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
+                                                    ),
+                                                  );
+                                                },
+                                                child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover),
+                                              ),
                                             ),
                                           ),
                                           Padding(
@@ -241,58 +263,125 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(stock.coffeeType, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                                                Text(stock.coffeeType, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                                                 const SizedBox(height: 4),
                                                 Text('${stock.quantity} kg available', overflow: TextOverflow.ellipsis),
                                                 Text('Price: UGX ${stock.pricePerKg}/kg', overflow: TextOverflow.ellipsis),
                                               ],
                                             ),
                                           ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                            children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.message),
-                                                onPressed: () async {
-                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => ChatScreen(
-                                                        currentUser: widget.buyer,
-                                                        otherUser: farmer!,
-                                                        coffeeStock: stock,
-                                                      ),
+                                          // interest / like row
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    IconButton(
+                                                      icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? Colors.red : Colors.grey),
+                                                      onPressed: () async {
+                                                        if (stockId == null) return;
+                                                        if (liked) {
+                                                          // remove interest
+                                                          await DatabaseHelper.instance.removeInterest(stockId, widget.buyer.id!);
+                                                          setState(() {
+                                                            _interestedStockIds.remove(stockId);
+                                                            _interestCounts[stockId] = (_interestCounts[stockId] ?? 1) - 1;
+                                                          });
+                                                        } else {
+                                                          // add interest
+                                                          await DatabaseHelper.instance.addInterest(stockId, widget.buyer.id!);
+                                                          setState(() {
+                                                            _interestedStockIds.add(stockId);
+                                                            _interestCounts[stockId] = (_interestCounts[stockId] ?? 0) + 1;
+                                                          });
+
+                                                          // prompt to continue to chat
+                                                          final consent = await showDialog<bool>(
+                                                            context: context,
+                                                            builder: (context) => AlertDialog(
+                                                              title: const Text('Interested?'),
+                                                              content: const Text('Would you like to start a chat with the owner to acquire this listing?'),
+                                                              actions: [
+                                                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
+                                                                ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
+                                                              ],
+                                                            ),
+                                                          );
+
+                                                          if (consent == true) {
+                                                            final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                            if (farmer != null) {
+                                                              Navigator.push(
+                                                                context,
+                                                                MaterialPageRoute(
+                                                                  builder: (context) => ChatScreen(
+                                                                    currentUser: widget.buyer,
+                                                                    otherUser: farmer,
+                                                                    coffeeStock: stock,
+                                                                  ),
+                                                                ),
+                                                              );
+                                                            }
+                                                          }
+                                                        }
+                                                      },
                                                     ),
-                                                  );
-                                                },
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(Icons.shopping_cart),
-                                                onPressed: () async {
-                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => ChatScreen(
-                                                        currentUser: widget.buyer,
-                                                        otherUser: farmer!,
-                                                        initialMessage: 'I would like to buy your ${stock.coffeeType}.',
-                                                        coffeeStock: stock,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
+                                                    Text('$likeCount'),
+                                                  ],
+                                                ),
+                                                // contact owner quick action
+                                                IconButton(
+                                                  icon: const Icon(Icons.message),
+                                                  onPressed: () async {
+                                                    final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                    if (farmer != null) {
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (context) => ChatScreen(
+                                                            currentUser: widget.buyer,
+                                                            otherUser: farmer,
+                                                            coffeeStock: stock,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }
+                                                  },
+                                                ),
+                                              ],
+                                            ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
+                                           const SizedBox(height: 8),
+                                           Row(
+                                             mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                             children: [
+                                               IconButton(
+                                                 icon: const Icon(Icons.shopping_cart),
+                                                 onPressed: () async {
+                                                   final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                   Navigator.push(
+                                                     context,
+                                                     MaterialPageRoute(
+                                                       builder: (context) => ChatScreen(
+                                                         currentUser: widget.buyer,
+                                                         otherUser: farmer!,
+                                                         initialMessage: 'I would like to buy your ${stock.coffeeType}.',
+                                                         coffeeStock: stock,
+                                                       ),
+                                                     ),
+                                                   );
+                                                 },
+                                               ),
+                                             ],
+                                           ),
+                                         ],
+                                       ),
+                                     ),
+                                   ),
+                                 );
+                               },
                             ),
                     );
                   }

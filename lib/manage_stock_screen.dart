@@ -1,10 +1,12 @@
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
+import 'package:kaawa_mobile/interested_buyers_screen.dart';
+import 'package:kaawa_mobile/widgets/listing_image.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -51,6 +53,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       quantity: stock.quantity,
       pricePerKg: stock.pricePerKg,
       coffeePicturePath: stock.coffeePicturePath,
+      description: stock.description,
       isSold: !stock.isSold,
     );
     await DatabaseHelper.instance.updateCoffeeStock(newStock);
@@ -79,7 +82,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
               future: _stockFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Center(child: SizedBox(width: double.infinity, height: 200, child: ShimmerSkeleton.rect()));
                 } else if (snapshot.hasError) {
                   return const Center(child: Text('Error loading stock.'));
                 } else {
@@ -94,13 +97,47 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                               margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                               child: ListTile(
                                 leading: stock.coffeePicturePath != null
-                                    ? Image.file(File(stock.coffeePicturePath!))
+                                    ? SizedBox(width: 40, height: 40, child: ClipRRect(borderRadius: BorderRadius.circular(4), child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover)))
                                     : const Icon(Icons.image, size: 40),
                                 title: Text(stock.coffeeType),
                                 subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
+                                    // Interested buyers button with count badge
+                                    FutureBuilder<int>(
+                                      future: DatabaseHelper.instance.getInterestCountForStock(stock.id!),
+                                      builder: (context, snapshotCount) {
+                                        final count = snapshotCount.data ?? 0;
+                                        return IconButton(
+                                          icon: Stack(
+                                            alignment: Alignment.center,
+                                            children: [
+                                              const Icon(Icons.group),
+                                              if (count > 0)
+                                                Positioned(
+                                                  right: -6,
+                                                  top: -6,
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(4),
+                                                    decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                                    child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          onPressed: () {
+                                            // open the interested buyers screen for this stock
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
+                                              ),
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
                                     IconButton(
                                       icon: const Icon(Icons.edit),
                                       onPressed: () => _showStockDialog(stock: stock),
@@ -144,6 +181,7 @@ class _StockDialogState extends State<_StockDialog> {
   late TextEditingController _coffeeTypeController;
   late TextEditingController _quantityController;
   late TextEditingController _pricePerKgController;
+  late TextEditingController _descriptionController;
   String? _coffeePicturePath;
 
   @override
@@ -152,6 +190,7 @@ class _StockDialogState extends State<_StockDialog> {
     _coffeeTypeController = TextEditingController(text: widget.stock?.coffeeType);
     _quantityController = TextEditingController(text: widget.stock?.quantity.toString());
     _pricePerKgController = TextEditingController(text: widget.stock?.pricePerKg.toString());
+    _descriptionController = TextEditingController(text: widget.stock?.description ?? '');
     _coffeePicturePath = widget.stock?.coffeePicturePath;
   }
 
@@ -179,6 +218,7 @@ class _StockDialogState extends State<_StockDialog> {
         quantity: double.parse(_quantityController.text),
         pricePerKg: double.parse(_pricePerKgController.text),
         coffeePicturePath: _coffeePicturePath,
+        description: _descriptionController.text,
       );
 
       if (widget.stock == null) {
@@ -232,6 +272,12 @@ class _StockDialogState extends State<_StockDialog> {
                 return null;
               },
             ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _descriptionController,
+              decoration: const InputDecoration(labelText: 'Description'),
+              maxLines: 3,
+            ),
             const SizedBox(height: 16),
             _buildImagePicker(),
           ],
@@ -257,7 +303,7 @@ class _StockDialogState extends State<_StockDialog> {
         const Text('Coffee Picture', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (_coffeePicturePath != null)
-          Image.file(File(_coffeePicturePath!), height: 150),
+          SizedBox(height: 150, width: double.infinity, child: ClipRRect(borderRadius: BorderRadius.circular(8), child: ListingImage(path: _coffeePicturePath, fit: BoxFit.cover))),
         TextButton.icon(
           icon: const Icon(Icons.image),
           label: Text(_coffeePicturePath == null ? 'Select Image' : 'Change Image'),

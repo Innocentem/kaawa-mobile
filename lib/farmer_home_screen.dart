@@ -1,5 +1,4 @@
-
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa_mobile/auth_service.dart';
@@ -7,13 +6,16 @@ import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/conversations_screen.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/favorites_screen.dart';
 import 'package:kaawa_mobile/welcome_screen.dart';
 import 'package:kaawa_mobile/manage_stock_screen.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/interested_buyers_screen.dart';
+import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
   final User farmer;
@@ -33,7 +35,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
-  final AuthService _authService = AuthService();
+  int _totalInterestedCount = 0;
+  Timer? _refreshTimer;
+  Map<int, List<User>> _interestedByStock = {};
+  List<CoffeeStock> _farmerStocks = [];
+  final AuthService _auth_service = AuthService();
 
   @override
   void initState() {
@@ -52,10 +58,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
       curve: Curves.easeIn,
     );
     _animationController.forward();
+    _loadTotalInterestCount();
+    _loadInterestedOverview();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadInterestedOverview());
   }
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _animationController.dispose();
     super.dispose();
   }
@@ -138,7 +148,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   }
 
   Future<void> _logout() async {
-    await _authService.logout();
+    await _auth_service.logout();
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const WelcomeScreen()),
@@ -146,10 +156,52 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     );
   }
 
+  Future<void> _loadTotalInterestCount() async {
+    final count = await DatabaseHelper.instance.getTotalInterestCountForFarmer(widget.farmer.id!);
+    setState(() {
+      _totalInterestedCount = count;
+    });
+  }
+
+  Future<void> _loadInterestedOverview() async {
+    try {
+      final stocks = await DatabaseHelper.instance.getCoffeeStock(widget.farmer.id!);
+      final Map<int, List<User>> map = {};
+      // parallel fetch interested buyers per stock
+      await Future.wait(stocks.map((s) async {
+        if (s.id != null) {
+          final buyers = await DatabaseHelper.instance.getInterestedBuyersForStock(s.id!);
+          if (buyers.isNotEmpty) {
+            map[s.id!] = buyers;
+          }
+        }
+      }));
+
+      final total = await DatabaseHelper.instance.getTotalInterestCountForFarmer(widget.farmer.id!);
+
+      setState(() {
+        _farmerStocks = stocks;
+        _interestedByStock = map;
+        _totalInterestedCount = total;
+      });
+    } catch (_) {
+      // ignore errors silently for periodic refresh
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // compute scale-aware sizes so cards don't overflow with large text settings
+    final textScale = MediaQuery.of(context).textScaleFactor;
+    // Allow a larger maximum card height to accommodate extreme text scaling
+    final cardHeight = (120 * textScale).clamp(100.0, 320.0);
+    final avatarSize = (44 * textScale).clamp(32.0, 80.0);
+
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: theme.colorScheme.primary,
         title: Text('Welcome, ${widget.farmer.fullName}'),
         actions: [
           IconButton(
@@ -168,7 +220,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                     MaterialPageRoute(
                       builder: (context) => ConversationsScreen(currentUser: widget.farmer),
                     ),
-                  ).then((_) => _getUnreadMessageCount());
+                  ).then((_) {
+                    // refresh unread messages count when returning
+                    _getUnreadMessageCount();
+                    // also refresh conversations/overview
+                    _loadInterestedOverview();
+                  });
                 },
               ),
               if (_unreadMessageCount > 0)
@@ -212,6 +269,35 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             icon: const Icon(Icons.logout),
             onPressed: _logout,
           ),
+          // Manage stock + interested buyers shortcut (shows badge with total interested buyers)
+          IconButton(
+            icon: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.group),
+                if (_totalInterestedCount > 0)
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      child: Text('$_totalInterestedCount', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                    ),
+                  ),
+              ],
+            ),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ManageStockScreen(farmer: widget.farmer),
+                ),
+              );
+              // refresh count after returning
+              _loadTotalInterestCount();
+            },
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -231,11 +317,146 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Available Buyers', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            // Interested buyers overview section
+            if (_interestedByStock.isNotEmpty) ...[
+              Text('Interested Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: cardHeight,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _farmerStocks.length,
+                  itemBuilder: (context, idx) {
+                    final stock = _farmerStocks[idx];
+                    if (stock.id == null) return const SizedBox.shrink();
+                    final buyers = _interestedByStock[stock.id!] ?? [];
+                    if (buyers.isEmpty) return const SizedBox.shrink();
+
+                    return SizedBox(
+                      width: 220,
+                      height: cardHeight,
+                      child: Card(
+                        margin: const EdgeInsets.only(right: 12),
+                        child: InkWell(
+                          onTap: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
+                              ),
+                            );
+                            _loadInterestedOverview();
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // show stock title and a mini avatar of the first interested buyer (if any)
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                stock.coffeeType,
+                                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            if (buyers.isNotEmpty)
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 8.0),
+                                                child: InkWell(
+                                                  borderRadius: BorderRadius.circular(24),
+                                                  onTap: () async {
+                                                    final buyer = buyers[0];
+                                                    // navigate to buyer profile and refresh after return
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer),
+                                                      ),
+                                                    ).then((_) {
+                                                      // when returning, refresh interested overview and total count
+                                                      _loadInterestedOverview();
+                                                      _loadTotalInterestCount();
+                                                      _getUnreadMessageCount();
+                                                    });
+                                                  },
+                                                  child: AppAvatar(
+                                                    filePath: buyers[0].profilePicturePath,
+                                                    imageUrl: buyers[0].profilePicturePath,
+                                                    size: 32,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          '${buyers.length} interested',
+                                          style: theme.textTheme.bodySmall,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: List.generate(
+                                            buyers.length > 3 ? 3 : buyers.length,
+                                            (i) => Padding(
+                                              padding: const EdgeInsets.only(right: 6.0),
+                                              child: AppAvatar(
+                                                filePath: buyers[i].profilePicturePath,
+                                                imageUrl: buyers[i].profilePicturePath,
+                                                size: avatarSize,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                Align(
+                                  alignment: Alignment.bottomRight,
+                                  child: TextButton(
+                                    onPressed: () async {
+                                      await Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
+                                        ),
+                                      );
+                                      // after returning from viewing interested buyers, refresh counts and overview
+                                      await _loadInterestedOverview();
+                                      await _loadTotalInterestCount();
+                                    },
+                                    child: const Text('View all'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            Text('Available Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Tap on a buyer to view their profile. Use the star to mark as favorite, or the message icon to start a conversation.',
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -258,115 +479,108 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                 future: _buyersFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
                   } else if (snapshot.hasError) {
                     return const Center(child: Text('Error loading buyers.'));
                   } else {
                     _allBuyers = snapshot.data ?? [];
                     _filteredBuyers = List.from(_allBuyers);
-                    return FadeTransition(
-                      opacity: _animation,
-                      child: _filteredBuyers.isEmpty && _searchController.text.isNotEmpty
-                          ? const Center(child: Text('No buyers found.'))
-                          : GridView.builder(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
-                                childAspectRatio: 0.75,
-                              ),
-                              itemCount: _filteredBuyers.length,
-                              itemBuilder: (context, index) {
-                                final buyer = _filteredBuyers[index];
-                                final isFavorite = _favoriteUserIds.contains(buyer.id);
-                                final distance = widget.farmer.latitude != null &&
-                                        widget.farmer.longitude != null &&
-                                        buyer.latitude != null &&
-                                        buyer.longitude != null
-                                    ? Geolocator.distanceBetween(
-                                        widget.farmer.latitude!,
-                                        widget.farmer.longitude!,
-                                        buyer.latitude!,
-                                        buyer.longitude!,
-                                      ) / 1000
-                                    : null;
-                                return Card(
-                                  elevation: 4,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  child: InkWell(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer),
+
+                    final Widget content = _filteredBuyers.isEmpty && _searchController.text.isNotEmpty
+                        ? const Center(child: Text('No buyers found.'))
+                        : GridView.builder(
+                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.75,
+                            ),
+                            itemCount: _filteredBuyers.length,
+                            itemBuilder: (context, index) {
+                              final buyer = _filteredBuyers[index];
+                              final isFavorite = _favoriteUserIds.contains(buyer.id);
+                              final distance = (widget.farmer.latitude != null &&
+                                      widget.farmer.longitude != null &&
+                                      buyer.latitude != null &&
+                                      buyer.longitude != null)
+                                  ? Geolocator.distanceBetween(
+                                          widget.farmer.latitude!,
+                                          widget.farmer.longitude!,
+                                          buyer.latitude!,
+                                          buyer.longitude!) /
+                                      1000
+                                  : null;
+
+                              return Card(
+                                elevation: 4,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                child: InkWell(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer),
+                                      ),
+                                    );
+                                  },
+                                  child: SingleChildScrollView(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        AspectRatio(
+                                          aspectRatio: 1,
+                                          child: AppAvatar(
+                                            filePath: buyer.profilePicturePath,
+                                            imageUrl: buyer.profilePicturePath,
+                                            fit: BoxFit.cover,
+                                          ),
                                         ),
-                                      );
-                                    },
-                                    child: SingleChildScrollView(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          AspectRatio(
-                                            aspectRatio: 1,
-                                            child: CircleAvatar(
-                                              radius: 30,
-                                              backgroundImage: buyer.profilePicturePath != null
-                                                  ? FileImage(File(buyer.profilePicturePath!))
-                                                  : null,
-                                              child: buyer.profilePicturePath == null
-                                                  ? const Icon(Icons.person, size: 30)
-                                                  : null,
-                                            ),
-                                          ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(8.0),
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(buyer.fullName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                                const SizedBox(height: 4),
-                                                Text('District: ${buyer.district}'),
-                                                if (distance != null)
-                                                  Text('${distance.toStringAsFixed(1)} km away'),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        Padding(
+                                          padding: const EdgeInsets.all(8.0),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              IconButton(
-                                                icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
-                                                onPressed: () => _toggleFavorite(buyer.id!),
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(Icons.message),
-                                                onPressed: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => ChatScreen(
-                                                        currentUser: widget.farmer,
-                                                        otherUser: buyer,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                              IconButton(
-                                                icon: const Icon(Icons.phone),
-                                                onPressed: () => _makePhoneCall(buyer.phoneNumber),
-                                              ),
+                                              Text(buyer.fullName, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                              const SizedBox(height: 4),
+                                              Text('District: ${buyer.district}'),
+                                              if (distance != null) Text('${distance.toStringAsFixed(1)} km away'),
                                             ],
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                          children: [
+                                            IconButton(
+                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? Colors.amber : Colors.grey),
+                                              onPressed: () => _toggleFavorite(buyer.id!),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.message),
+                                              onPressed: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ChatScreen(currentUser: widget.farmer, otherUser: buyer),
+                                                  ),
+                                                ).then((_) => _getUnreadMessageCount());
+                                              },
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.phone),
+                                              onPressed: () => _makePhoneCall(buyer.phoneNumber),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                );
-                              },
-                            ),
-                    );
+                                ),
+                              );
+                            },
+                          );
+
+                    return FadeTransition(opacity: _animation, child: content);
                   }
                 },
               ),

@@ -1,8 +1,9 @@
-
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 
 class FavoritesScreen extends StatefulWidget {
   final User currentUser;
@@ -36,7 +37,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         future: _favoritesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
           } else if (snapshot.hasError) {
             return const Center(child: Text('Error loading favorites.'));
           } else {
@@ -56,13 +57,10 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: favoriteUser.profilePicturePath != null
-                                ? NetworkImage(favoriteUser.profilePicturePath!)
-                                : null,
-                            child: favoriteUser.profilePicturePath == null
-                                ? const Icon(Icons.person)
-                                : null,
+                          leading: AppAvatar(
+                            filePath: favoriteUser.profilePicturePath,
+                            imageUrl: favoriteUser.profilePicturePath, // support both file paths and remote urls
+                            size: 48,
                           ),
                           title: Text(favoriteUser.fullName),
                           subtitle: Text(favoriteUser.district),

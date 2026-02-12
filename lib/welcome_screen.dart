@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/auth_service.dart';
 import 'package:kaawa_mobile/buyer_home_screen.dart';
@@ -59,45 +58,124 @@ class WelcomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Welcome to Kaawa'),
-      ),
-      body: Center(
+      body: SafeArea(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            ElevatedButton(
-              child: const Text('Login'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              },
+          children: [
+            // Top image with rounded bottom corners
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+              child: Image.asset(
+                'assets/images/seeds.jpg',
+                width: double.infinity,
+                height: MediaQuery.of(context).size.height * 0.45,
+                fit: BoxFit.cover,
+              ),
             ),
+
+            const SizedBox(height: 20),
+
+            // Title and subtitle
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  Text(
+                    'Welcome to Kaawa',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Connecting coffee farmers and buyers',
+                    style: theme.textTheme.bodyMedium,
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+
+            const Spacer(),
+
+            // Action buttons
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                      ),
+                      child: Text(
+                        'Login',
+                        style: theme.textTheme.labelLarge?.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const FarmerRegistrationScreen()),
+                        );
+                      },
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        side: BorderSide(color: theme.colorScheme.primary),
+                      ),
+                      child: Text(
+                        'Register as Farmer',
+                        style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  SizedBox(
+                    width: double.infinity,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
+                        );
+                      },
+                      child: Text(
+                        'Register as Buyer',
+                        style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.secondary),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 24),
-            const Text("Don't have an account?"),
-            const SizedBox(height: 8),
-            ElevatedButton(
-              child: const Text('Register as a Farmer'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const FarmerRegistrationScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              child: const Text('Register as a Buyer'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
-                );
-              },
-            ),
           ],
         ),
       ),

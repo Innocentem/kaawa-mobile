@@ -1,4 +1,3 @@
-
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -22,7 +21,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    return await openDatabase(path, version: 17, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to add description to coffee_stock and seenByFarmer flag
+    return await openDatabase(path, version: 20, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -44,6 +44,7 @@ class DatabaseHelper {
     await _createReviewsTable(db);
     await _createFavoritesTable(db);
     await _createCoffeeStockTable(db);
+    await _createInterestedBuyersTable(db);
   }
 
   Future<void> _createMessagesTable(Database db) async {
@@ -60,7 +61,7 @@ class DatabaseHelper {
     ''');
   }
 
-    Future<void> _createReviewsTable(Database db) async {
+  Future<void> _createReviewsTable(Database db) async {
     await db.execute('''
       CREATE TABLE reviews(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,11 +92,24 @@ class DatabaseHelper {
         quantity REAL NOT NULL,
         pricePerKg REAL NOT NULL,
         coffeePicturePath TEXT,
+        description TEXT DEFAULT '',
         isSold INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
 
+  Future<void> _createInterestedBuyersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE interested_buyers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        coffeeStockId INTEGER NOT NULL,
+        buyerId INTEGER NOT NULL,
+        timestamp TEXT NOT NULL,
+        seenByFarmer INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(coffeeStockId, buyerId)
+      )
+    ''');
+  }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 13) {
@@ -114,6 +128,17 @@ class DatabaseHelper {
     }
     if (oldVersion < 17) {
       await db.execute('ALTER TABLE messages ADD COLUMN coffeeStockId INTEGER');
+    }
+    if (oldVersion < 18) {
+      await _createInterestedBuyersTable(db);
+    }
+    if (oldVersion < 19) {
+      // add seenByFarmer flag to track whether farmer has viewed the interested buyers for a stock
+      await db.execute('ALTER TABLE interested_buyers ADD COLUMN seenByFarmer INTEGER NOT NULL DEFAULT 0');
+    }
+    if (oldVersion < 20) {
+      // add description column to coffee_stock
+      await db.execute("ALTER TABLE coffee_stock ADD COLUMN description TEXT DEFAULT ''");
     }
   }
 
@@ -244,7 +269,7 @@ class DatabaseHelper {
     return conversations;
   }
 
-    Future<int> insertReview(Review review) async {
+  Future<int> insertReview(Review review) async {
     final db = await instance.database;
     return await db.insert('reviews', review.toMap());
   }
@@ -328,5 +353,64 @@ class DatabaseHelper {
     final db = await instance.database;
     final maps = await db.query('coffee_stock', where: 'isSold = 0');
     return maps.map((map) => CoffeeStock.fromMap(map)).toList();
+  }
+
+  /// Returns the total number of interested buyers across all active (isSold = 0) stocks for the given farmer.
+  Future<int> getTotalInterestCountForFarmer(int farmerId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT COUNT(ib.id) FROM interested_buyers ib
+      INNER JOIN coffee_stock cs ON cs.id = ib.coffeeStockId
+      WHERE cs.farmerId = ? AND cs.isSold = 0 AND ib.seenByFarmer = 0
+    ''', [farmerId]);
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  // Interested buyers helpers
+  Future<void> addInterest(int coffeeStockId, int buyerId) async {
+    final db = await instance.database;
+    await db.insert('interested_buyers', {
+      'coffeeStockId': coffeeStockId,
+      'buyerId': buyerId,
+      'timestamp': DateTime.now().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+  }
+
+  Future<void> removeInterest(int coffeeStockId, int buyerId) async {
+    final db = await instance.database;
+    await db.delete('interested_buyers', where: 'coffeeStockId = ? AND buyerId = ?', whereArgs: [coffeeStockId, buyerId]);
+  }
+
+  Future<bool> isInterested(int coffeeStockId, int buyerId) async {
+    final db = await instance.database;
+    final maps = await db.query('interested_buyers', where: 'coffeeStockId = ? AND buyerId = ?', whereArgs: [coffeeStockId, buyerId]);
+    return maps.isNotEmpty;
+  }
+
+  Future<int> getInterestCountForStock(int coffeeStockId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('SELECT COUNT(*) FROM interested_buyers WHERE coffeeStockId = ?', [coffeeStockId]);
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<List<User>> getInterestedBuyersForStock(int coffeeStockId) async {
+    final db = await instance.database;
+    final maps = await db.rawQuery('''
+      SELECT u.* FROM users u
+      INNER JOIN interested_buyers ib ON u.id = ib.buyerId
+      WHERE ib.coffeeStockId = ?
+    ''', [coffeeStockId]);
+    return maps.map((map) => User.fromMap(map)).toList();
+  }
+
+  Future<void> markInterestsAsSeenForStock(int coffeeStockId) async {
+    final db = await instance.database;
+    await db.update('interested_buyers', {'seenByFarmer': 1}, where: 'coffeeStockId = ?', whereArgs: [coffeeStockId]);
+  }
+
+  Future<List<int>> getInterestedStockIdsForBuyer(int buyerId) async {
+    final db = await instance.database;
+    final maps = await db.query('interested_buyers', columns: ['coffeeStockId'], where: 'buyerId = ?', whereArgs: [buyerId]);
+    return maps.map((m) => m['coffeeStockId'] as int).toList();
   }
 }

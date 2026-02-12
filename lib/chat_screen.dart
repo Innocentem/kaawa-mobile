@@ -1,10 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/message_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:intl/intl.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 
 class ChatScreen extends StatefulWidget {
   final User currentUser;
@@ -104,7 +104,7 @@ class _ChatScreenState extends State<ChatScreen> {
               future: _messagesFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
                 } else if (snapshot.hasError) {
                   return const Center(child: Text('Error loading messages.'));
                 } else {

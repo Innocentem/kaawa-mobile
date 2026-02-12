@@ -1,10 +1,10 @@
-
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/data/conversation_data.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
+import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final User currentUser;
@@ -38,7 +38,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         future: _conversationsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
           } else if (snapshot.hasError) {
             return Center(child: Text('Error loading conversations: ${snapshot.error}'));
           } else {
@@ -54,13 +54,10 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       final coffeeStock = conversation.coffeeStock;
 
                       return ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: otherUser.profilePicturePath != null
-                              ? FileImage(File(otherUser.profilePicturePath!))
-                              : null,
-                          child: otherUser.profilePicturePath == null
-                              ? const Icon(Icons.person)
-                              : null,
+                        leading: AppAvatar(
+                          filePath: otherUser.profilePicturePath,
+                          imageUrl: otherUser.profilePicturePath,
+                          size: 40,
                         ),
                         title: Text(otherUser.fullName),
                         subtitle: Column(

@@ -1,4 +1,3 @@
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +8,7 @@ import 'package:kaawa_mobile/write_review_screen.dart';
 import 'package:kaawa_mobile/view_reviews_screen.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
 
 class ProfileScreen extends StatefulWidget {
   final User currentUser;
@@ -120,14 +120,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Center(
                 child: Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: _profilePicturePath != null
-                          ? FileImage(File(_profilePicturePath!))
-                          : null,
-                      child: _profilePicturePath == null
-                          ? const Icon(Icons.person, size: 50)
-                          : null,
+                    AppAvatar(
+                      filePath: _profilePicturePath,
+                      imageUrl: _profilePicturePath,
+                      size: 100,
                     ),
                     if (_isEditing)
                       Positioned(
