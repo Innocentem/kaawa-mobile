@@ -10,9 +10,8 @@ import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/data/message_data.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
 import 'package:kaawa_mobile/widgets/listing_image.dart';
+import 'package:kaawa_mobile/widgets/listing_carousel.dart';
 import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 import 'package:kaawa_mobile/product_detail_screen.dart';
 
@@ -99,6 +98,37 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       MaterialPageRoute(builder: (context) => const WelcomeScreen()),
       (route) => false,
     );
+  }
+
+  Future<void> _launchPhone(String? phone) async {
+    if (phone == null || phone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: phone);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open dialer')));
+    }
+  }
+
+  List<String?> _parseImages(String? pathField) {
+    if (pathField == null || pathField.trim().isEmpty) return [null];
+    // allow comma-separated list of paths
+    final parts = pathField.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty) return [null];
+    return parts;
+  }
+
+  Future<void> _onCallPressed(int farmerId) async {
+    try {
+      final farmer = await DatabaseHelper.instance.getUserById(farmerId);
+      if (farmer == null || farmer.phoneNumber.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Farmer phone number not available')));
+        return;
+      }
+      await _launchPhone(farmer.phoneNumber);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not initiate call: $e')));
+    }
   }
 
   @override
@@ -222,6 +252,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                 final liked = stockId != null && _interestedStockIds.contains(stockId);
                                 final likeCount = stockId != null ? (_interestCounts[stockId] ?? 0) : 0;
 
+                                final images = _parseImages(stock.coffeePicturePath);
+
                                 return Card(
                                   elevation: 4,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -254,7 +286,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                     ),
                                                   );
                                                 },
-                                                child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover),
+                                                child: ListingCarousel(images: images, fit: BoxFit.cover),
                                               ),
                                             ),
                                           ),
@@ -332,23 +364,35 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                   ],
                                                 ),
                                                 // contact owner quick action
-                                                IconButton(
-                                                  icon: const Icon(Icons.message),
-                                                  onPressed: () async {
-                                                    final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                    if (farmer != null) {
-                                                      Navigator.push(
-                                                        context,
-                                                        MaterialPageRoute(
-                                                          builder: (context) => ChatScreen(
-                                                            currentUser: widget.buyer,
-                                                            otherUser: farmer,
-                                                            coffeeStock: stock,
-                                                          ),
-                                                        ),
-                                                      );
-                                                    }
-                                                  },
+                                                Row(
+                                                  children: [
+                                                    IconButton(
+                                                      icon: const Icon(Icons.call),
+                                                      onPressed: () async {
+                                                        if (stock.farmerId != null) {
+                                                          _onCallPressed(stock.farmerId);
+                                                        }
+                                                      },
+                                                    ),
+                                                    IconButton(
+                                                      icon: const Icon(Icons.message),
+                                                      onPressed: () async {
+                                                        final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                        if (farmer != null) {
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) => ChatScreen(
+                                                                currentUser: widget.buyer,
+                                                                otherUser: farmer,
+                                                                coffeeStock: stock,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),

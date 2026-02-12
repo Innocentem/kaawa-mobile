@@ -6,6 +6,7 @@ import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/interested_buyers_screen.dart';
 import 'package:kaawa_mobile/widgets/listing_image.dart';
+import 'package:kaawa_mobile/widgets/listing_carousel.dart';
 import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -196,17 +197,51 @@ class _StockDialogState extends State<_StockDialog> {
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source);
+    try {
+      // try multi-image first
+      final pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles != null && pickedFiles.isNotEmpty) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final savedPaths = <String>[];
+        for (final pf in pickedFiles) {
+          final fileName = p.basename(pf.path);
+          final savedImage = await File(pf.path).copy('${appDir.path}/$fileName');
+          savedPaths.add(savedImage.path);
+        }
+        // merge with existing if present
+        final existing = _coffeePicturePath == null ? [] : _coffeePicturePath!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        final merged = [...existing, ...savedPaths];
+        setState(() {
+          _coffeePicturePath = merged.join(',');
+        });
+        return;
+      }
 
-    if (pickedFile != null) {
-      final appDir = await getApplicationDocumentsDirectory();
-      final fileName = p.basename(pickedFile.path);
-      final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
+      // fallback to single image picker if multi not supported / empty
+      final pickedFile = await picker.pickImage(source: source);
+      if (pickedFile != null) {
+        final appDir = await getApplicationDocumentsDirectory();
+        final fileName = p.basename(pickedFile.path);
+        final savedImage = await File(pickedFile.path).copy('${appDir.path}/$fileName');
 
-      setState(() {
-        _coffeePicturePath = savedImage.path;
-      });
+        final existing = _coffeePicturePath == null ? [] : _coffeePicturePath!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        existing.add(savedImage.path);
+
+        setState(() {
+          _coffeePicturePath = existing.join(',');
+        });
+      }
+    } catch (e) {
+      // ignore or show error
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not pick image(s): $e')));
     }
+  }
+
+  List<String?> _parseImages(String? pathField) {
+    if (pathField == null || pathField.trim().isEmpty) return [null];
+    final parts = pathField.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty) return [null];
+    return parts;
   }
 
   Future<void> _saveStock() async {
@@ -303,7 +338,14 @@ class _StockDialogState extends State<_StockDialog> {
         const Text('Coffee Picture', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (_coffeePicturePath != null)
-          SizedBox(height: 150, width: double.infinity, child: ClipRRect(borderRadius: BorderRadius.circular(8), child: ListingImage(path: _coffeePicturePath, fit: BoxFit.cover))),
+          SizedBox(
+            height: 150,
+            width: double.infinity,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: ListingCarousel(images: _parseImages(_coffeePicturePath), fit: BoxFit.cover),
+            ),
+          ),
         TextButton.icon(
           icon: const Icon(Icons.image),
           label: Text(_coffeePicturePath == null ? 'Select Image' : 'Change Image'),
