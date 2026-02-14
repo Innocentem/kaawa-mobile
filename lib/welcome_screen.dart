@@ -7,6 +7,8 @@ import 'package:kaawa_mobile/farmer_home_screen.dart';
 import 'package:kaawa_mobile/farmer_registration_screen.dart';
 import 'package:kaawa_mobile/buyer_registration_screen.dart';
 import 'package:kaawa_mobile/login_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:kaawa_mobile/theme/theme.dart';
 
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
@@ -59,123 +61,138 @@ class WelcomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
 
     return Scaffold(
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // Top image with rounded bottom corners
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(40),
-                bottomRight: Radius.circular(40),
-              ),
-              child: Image.asset(
-                'assets/images/seeds.jpg',
-                width: double.infinity,
-                height: MediaQuery.of(context).size.height * 0.45,
-                fit: BoxFit.cover,
+            Column(
+              children: [
+                // Top image with rounded bottom corners
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(40),
+                    bottomRight: Radius.circular(40),
+                  ),
+                  child: Image.asset(
+                    'assets/images/seeds.jpg',
+                    width: double.infinity,
+                    height: MediaQuery.of(context).size.height * 0.45,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Title and subtitle
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Welcome to Kaawa',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Connecting coffee farmers and buyers',
+                        style: theme.textTheme.bodyMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Spacer(),
+
+                // Action buttons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const LoginScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                          ),
+                          child: Text(
+                            'Login',
+                            style: theme.textTheme.labelLarge?.copyWith(color: Colors.white),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const FarmerRegistrationScreen()),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                            side: BorderSide(color: theme.colorScheme.primary),
+                          ),
+                          child: Text(
+                            'Register as Farmer',
+                            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
+                            );
+                          },
+                          child: Text(
+                            'Register as Buyer',
+                            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.secondary),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+              ],
+            ),
+            // Theme toggle top-right
+            Positioned(
+              right: 12,
+              top: 12,
+              child: IconButton(
+                icon: Icon(themeNotifier.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode, color: Colors.white),
+                onPressed: () => themeNotifier.toggleTheme(),
+                tooltip: 'Toggle theme',
               ),
             ),
-
-            const SizedBox(height: 20),
-
-            // Title and subtitle
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  Text(
-                    'Welcome to Kaawa',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Connecting coffee farmers and buyers',
-                    style: theme.textTheme.bodyMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-
-            const Spacer(),
-
-            // Action buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.primary,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                      ),
-                      child: Text(
-                        'Login',
-                        style: theme.textTheme.labelLarge?.copyWith(color: Colors.white),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const FarmerRegistrationScreen()),
-                        );
-                      },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                        side: BorderSide(color: theme.colorScheme.primary),
-                      ),
-                      child: Text(
-                        'Register as Farmer',
-                        style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
-                        );
-                      },
-                      child: Text(
-                        'Register as Buyer',
-                        style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.secondary),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
           ],
         ),
       ),

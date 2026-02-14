@@ -21,8 +21,9 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to add description to coffee_stock and seenByFarmer flag
-    return await openDatabase(path, version: 20, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 22: remove xp/badges columns from users schema and
+    // provide a safe migration for existing DBs that still have those columns.
+    return await openDatabase(path, version: 22, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -38,6 +39,7 @@ class DatabaseHelper {
         latitude REAL,
         longitude REAL,
         village TEXT
+        -- xp and badgesCount removed intentionally
       )
     ''');
     await _createMessagesTable(db);
@@ -140,6 +142,75 @@ class DatabaseHelper {
       // add description column to coffee_stock
       await db.execute("ALTER TABLE coffee_stock ADD COLUMN description TEXT DEFAULT ''");
     }
+    // Migration to remove xp and badgesCount from users (safe migration)
+    if (oldVersion < 22) {
+      try {
+        // Copy only the desired columns into a temp table, drop original, rename back
+        await db.execute('CREATE TABLE users_temp AS SELECT id, fullName, phoneNumber, district, password, userType, profilePicturePath, latitude, longitude, village FROM users');
+        await db.execute('DROP TABLE users');
+        await db.execute('ALTER TABLE users_temp RENAME TO users');
+      } catch (e) {
+        // if anything goes wrong, ignore to preserve backward compatibility
+      }
+    }
+  }
+
+  /// Returns a polling stream of the user's activity summary.
+  Stream<Map<String, dynamic>> getUserActivityStream(int userId, {Duration interval = const Duration(seconds: 2)}) {
+    return Stream.periodic(interval).asyncMap((_) => getUserActivitySummary(userId)).asBroadcastStream();
+  }
+
+  /// Returns a combined, sorted activity log for the user.
+  Future<List<Map<String, dynamic>>> getUserActivityLog(int userId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> items = [];
+
+    // messages involving user
+    final msgMaps = await db.query('messages', where: 'senderId = ? OR receiverId = ?', whereArgs: [userId, userId], orderBy: 'timestamp DESC');
+    for (final m in msgMaps) {
+      items.add({
+        'type': 'message',
+        'senderId': m['senderId'],
+        'receiverId': m['receiverId'],
+        'text': m['text'],
+        'timestamp': m['timestamp'],
+        'coffeeStockId': m['coffeeStockId'],
+      });
+    }
+
+    // interests where user is buyer
+    final interestBuyerMaps = await db.query('interested_buyers', where: 'buyerId = ?', whereArgs: [userId], orderBy: 'timestamp DESC');
+    for (final ib in interestBuyerMaps) {
+      items.add({
+        'type': 'interest',
+        'buyerId': ib['buyerId'],
+        'coffeeStockId': ib['coffeeStockId'],
+        'timestamp': ib['timestamp'],
+      });
+    }
+
+    // interests where user is farmer (i.e., buyers interested in this farmer's stock)
+    final interestFarmerMaps = await db.rawQuery('SELECT ib.* FROM interested_buyers ib INNER JOIN coffee_stock cs ON cs.id = ib.coffeeStockId WHERE cs.farmerId = ? ORDER BY ib.timestamp DESC', [userId]);
+    for (final ib in interestFarmerMaps) {
+      items.add({
+        'type': 'interest_for_farmer',
+        'buyerId': ib['buyerId'],
+        'coffeeStockId': ib['coffeeStockId'],
+        'timestamp': ib['timestamp'],
+      });
+    }
+
+    // sort by timestamp desc when possible
+    items.sort((a, b) {
+      final ta = a['timestamp'] as String?;
+      final tb = b['timestamp'] as String?;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return DateTime.parse(tb).compareTo(DateTime.parse(ta));
+    });
+
+    return items;
   }
 
   Future<int> insertUser(User user) async {
@@ -181,6 +252,50 @@ class DatabaseHelper {
     final db = await instance.database;
     final maps = await db.query('users');
     return maps.map((map) => User.fromMap(map)).toList();
+  }
+
+  /// Returns a summary of user activity: listingsCount (if farmer), interestsCount (as buyer),
+  /// conversationsCount (distinct other users messaged) and earliest activity ISO timestamp (nullable).
+  Future<Map<String, dynamic>> getUserActivitySummary(int userId) async {
+    final db = await instance.database;
+
+    // listingsCount for farmer
+    final listingsResult = await db.rawQuery('SELECT COUNT(*) as c FROM coffee_stock WHERE farmerId = ?', [userId]);
+    final listingsCount = Sqflite.firstIntValue(listingsResult) ?? 0;
+
+    // interestsCount as buyer
+    final interestsResult = await db.rawQuery('SELECT COUNT(*) as c FROM interested_buyers WHERE buyerId = ?', [userId]);
+    final interestsCount = Sqflite.firstIntValue(interestsResult) ?? 0;
+
+    // conversationsCount: distinct other user ids in messages
+    final convResult = await db.rawQuery('''
+      SELECT COUNT(DISTINCT IIF(senderId = ?, receiverId, senderId)) as c
+      FROM messages
+      WHERE senderId = ? OR receiverId = ?
+    ''', [userId, userId, userId]);
+    final conversationsCount = Sqflite.firstIntValue(convResult) ?? 0;
+
+    // earliest activity timestamp from messages and interested_buyers (if any)
+    String? earliestIso;
+    final msgResult = await db.rawQuery('SELECT MIN(timestamp) as m FROM messages WHERE senderId = ? OR receiverId = ?', [userId, userId]);
+    final earliestMsg = msgResult.isNotEmpty ? msgResult.first['m'] as String? : null;
+    final interestResult = await db.rawQuery('SELECT MIN(timestamp) as m FROM interested_buyers WHERE buyerId = ?', [userId]);
+    final earliestInterest = interestResult.isNotEmpty ? interestResult.first['m'] as String? : null;
+
+    if (earliestMsg != null && earliestInterest != null) {
+      earliestIso = DateTime.parse(earliestMsg).isBefore(DateTime.parse(earliestInterest)) ? earliestMsg : earliestInterest;
+    } else if (earliestMsg != null) {
+      earliestIso = earliestMsg;
+    } else if (earliestInterest != null) {
+      earliestIso = earliestInterest;
+    }
+
+    return {
+      'listingsCount': listingsCount,
+      'interestsCount': interestsCount,
+      'conversationsCount': conversationsCount,
+      'earliestActivityIso': earliestIso,
+    };
   }
 
   Future<int> updateUser(User user) async {
@@ -403,14 +518,75 @@ class DatabaseHelper {
     return maps.map((map) => User.fromMap(map)).toList();
   }
 
+  /// Marks all interests for a given stock as seen by the farmer.
   Future<void> markInterestsAsSeenForStock(int coffeeStockId) async {
     final db = await instance.database;
     await db.update('interested_buyers', {'seenByFarmer': 1}, where: 'coffeeStockId = ?', whereArgs: [coffeeStockId]);
   }
 
+  /// Returns a list of coffeeStock IDs that the given buyer has expressed interest in.
   Future<List<int>> getInterestedStockIdsForBuyer(int buyerId) async {
     final db = await instance.database;
     final maps = await db.query('interested_buyers', columns: ['coffeeStockId'], where: 'buyerId = ?', whereArgs: [buyerId]);
     return maps.map((m) => m['coffeeStockId'] as int).toList();
+  }
+
+  /// Fetch reviews for a reviewed user together with reviewer user info using a single JOIN.
+  /// Returns a list where each element is a Map with keys: 'review' (Review) and 'reviewer' (User?).
+  Future<List<Map<String, dynamic>>> getReviewsWithReviewers(int reviewedUserId) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        r.id as review_id,
+        r.reviewerId as reviewerId,
+        r.reviewedUserId as reviewedUserId,
+        r.rating as rating,
+        r.reviewText as reviewText,
+        u.id as reviewer_id,
+        u.fullName as reviewer_fullName,
+        u.phoneNumber as reviewer_phoneNumber,
+        u.district as reviewer_district,
+        u.password as reviewer_password,
+        u.userType as reviewer_userType,
+        u.profilePicturePath as reviewer_profilePicturePath,
+        u.latitude as reviewer_latitude,
+        u.longitude as reviewer_longitude,
+        u.village as reviewer_village
+      FROM reviews r
+      LEFT JOIN users u ON r.reviewerId = u.id
+      WHERE r.reviewedUserId = ?
+      ORDER BY r.id DESC
+    ''', [reviewedUserId]);
+
+    final List<Map<String, dynamic>> result = [];
+    for (final row in rows) {
+      final review = {
+        'id': row['review_id'],
+        'reviewerId': row['reviewerId'],
+        'reviewedUserId': row['reviewedUserId'],
+        'rating': row['rating'],
+        'reviewText': row['reviewText'],
+      };
+
+      User? reviewer;
+      if (row['reviewer_id'] != null) {
+        reviewer = User(
+          id: row['reviewer_id'] as int?,
+          fullName: row['reviewer_fullName']?.toString() ?? '',
+          phoneNumber: row['reviewer_phoneNumber']?.toString() ?? '',
+          district: row['reviewer_district']?.toString() ?? '',
+          password: row['reviewer_password']?.toString() ?? '',
+          userType: (row['reviewer_userType'] != null && row['reviewer_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
+          profilePicturePath: row['reviewer_profilePicturePath']?.toString(),
+          latitude: row['reviewer_latitude'] is num ? (row['reviewer_latitude'] as num).toDouble() : null,
+          longitude: row['reviewer_longitude'] is num ? (row['reviewer_longitude'] as num).toDouble() : null,
+          village: row['reviewer_village']?.toString(),
+        );
+      }
+
+      result.add({'review': review, 'reviewer': reviewer});
+    }
+
+    return result;
   }
 }

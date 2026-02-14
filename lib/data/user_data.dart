@@ -1,4 +1,3 @@
-
 enum UserType { farmer, buyer }
 
 class User {
@@ -14,7 +13,6 @@ class User {
 
   // Farmer-specific fields
   final String? village;
-
 
   User({
     this.id,
