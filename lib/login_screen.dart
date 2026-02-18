@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +6,8 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/farmer_home_screen.dart';
 import 'package:kaawa_mobile/buyer_home_screen.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/forgot_password_screen.dart';
+import 'package:kaawa_mobile/contact_admin_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -70,6 +71,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ForgotPasswordScreen())),
+                    child: const Text('Forgot password?'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const ContactAdminScreen())),
+                    child: const Text('Contact admin'),
+                  ),
+                ],
+              ),
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {

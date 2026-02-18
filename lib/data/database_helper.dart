@@ -21,9 +21,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 22: remove xp/badges columns from users schema and
-    // provide a safe migration for existing DBs that still have those columns.
-    return await openDatabase(path, version: 22, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 23: add password_resets table for admin-handled resets
+    return await openDatabase(path, version: 23, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -47,6 +46,17 @@ class DatabaseHelper {
     await _createFavoritesTable(db);
     await _createCoffeeStockTable(db);
     await _createInterestedBuyersTable(db);
+    // password_resets table allows users to request admin help resetting passwords
+    await db.execute('''
+      CREATE TABLE password_resets(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phoneNumber TEXT NOT NULL,
+        requestedAt TEXT NOT NULL,
+        handled INTEGER NOT NULL DEFAULT 0,
+        handledAt TEXT,
+        handledByAdmin TEXT
+      )
+    ''');
   }
 
   Future<void> _createMessagesTable(Database db) async {
@@ -152,6 +162,19 @@ class DatabaseHelper {
       } catch (e) {
         // if anything goes wrong, ignore to preserve backward compatibility
       }
+    }
+    if (oldVersion < 23) {
+      // create password_resets table introduced in version 23
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS password_resets(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          phoneNumber TEXT NOT NULL,
+          requestedAt TEXT NOT NULL,
+          handled INTEGER NOT NULL DEFAULT 0,
+          handledAt TEXT,
+          handledByAdmin TEXT
+        )
+      ''');
     }
   }
 
@@ -588,5 +611,37 @@ class DatabaseHelper {
     }
 
     return result;
+  }
+
+  /// Password reset request helpers (admin-handled)
+  Future<int> insertPasswordResetRequest(String phoneNumber) async {
+    final db = await instance.database;
+    return await db.insert('password_resets', {
+      'phoneNumber': phoneNumber,
+      'requestedAt': DateTime.now().toIso8601String(),
+      'handled': 0,
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getPendingPasswordResetRequests() async {
+    final db = await instance.database;
+    final maps = await db.query('password_resets', where: 'handled = 0', orderBy: 'requestedAt DESC');
+    return maps;
+  }
+
+  Future<void> markPasswordResetHandled(int id, {String? adminName}) async {
+    final db = await instance.database;
+    await db.update('password_resets', {
+      'handled': 1,
+      'handledAt': DateTime.now().toIso8601String(),
+      'handledByAdmin': adminName ?? 'admin',
+    }, where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Helper to let admin set a user's password by phone number. Returns true if a user was updated.
+  Future<bool> adminSetUserPasswordByPhone(String phoneNumber, String newPasswordHash) async {
+    final db = await instance.database;
+    final res = await db.update('users', {'password': newPasswordHash}, where: 'phoneNumber = ?', whereArgs: [phoneNumber]);
+    return res > 0;
   }
 }

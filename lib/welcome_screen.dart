@@ -9,6 +9,8 @@ import 'package:kaawa_mobile/buyer_registration_screen.dart';
 import 'package:kaawa_mobile/login_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:kaawa_mobile/forgot_password_screen.dart';
+import 'package:kaawa_mobile/contact_admin_screen.dart';
 
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
@@ -159,23 +161,27 @@ class WelcomeScreen extends StatelessWidget {
                         ),
                       ),
 
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
 
-                      SizedBox(
-                        width: double.infinity,
-                        child: TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
-                            );
-                          },
-                          child: Text(
-                            'Register as Buyer',
-                            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.secondary),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (c) => const ForgotPasswordScreen()));
+                            },
+                            child: const Text('Forgot password?'),
                           ),
-                        ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (c) => const ContactAdminScreen()));
+                            },
+                            child: const Text('Contact admin'),
+                          ),
+                        ],
                       ),
+
+                      const SizedBox(height: 20),
                     ],
                   ),
                 ),
