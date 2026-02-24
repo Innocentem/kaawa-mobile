@@ -21,8 +21,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 23: add password_resets table for admin-handled resets
-    return await openDatabase(path, version: 23, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 24: add mustChangePassword flag to users
+    return await openDatabase(path, version: 25, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -37,7 +37,10 @@ class DatabaseHelper {
         profilePicturePath TEXT,
         latitude REAL,
         longitude REAL,
-        village TEXT
+        village TEXT,
+        mustChangePassword INTEGER NOT NULL DEFAULT 0,
+        suspendedUntil TEXT
+        ,suspensionReason TEXT
         -- xp and badgesCount removed intentionally
       )
     ''');
@@ -175,6 +178,21 @@ class DatabaseHelper {
           handledByAdmin TEXT
         )
       ''');
+    }
+    if (oldVersion < 24) {
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN mustChangePassword INTEGER NOT NULL DEFAULT 0');
+      } catch (e) {
+        // ignore if column already exists or DB doesn't support alter
+      }
+    }
+    if (oldVersion < 25) {
+      try {
+        await db.execute('ALTER TABLE users ADD COLUMN suspendedUntil TEXT');
+        await db.execute('ALTER TABLE users ADD COLUMN suspensionReason TEXT');
+      } catch (e) {
+        // ignore if column exists
+      }
     }
   }
 
@@ -643,5 +661,27 @@ class DatabaseHelper {
     final db = await instance.database;
     final res = await db.update('users', {'password': newPasswordHash}, where: 'phoneNumber = ?', whereArgs: [phoneNumber]);
     return res > 0;
+  }
+
+  // Admin helpers: suspend/unsuspend users
+  Future<void> suspendUser(int userId, DateTime until) async {
+    final db = await instance.database;
+    await db.update('users', {'suspendedUntil': until.toIso8601String()}, where: 'id = ?', whereArgs: [userId]);
+  }
+
+  Future<void> unsuspendUser(int userId) async {
+    final db = await instance.database;
+    await db.update('users', {'suspendedUntil': null, 'suspensionReason': null}, where: 'id = ?', whereArgs: [userId]);
+  }
+
+  Future<void> suspendUserWithReason(int userId, DateTime until, String? reason) async {
+    final db = await instance.database;
+    await db.update('users', {'suspendedUntil': until.toIso8601String(), 'suspensionReason': reason}, where: 'id = ?', whereArgs: [userId]);
+  }
+
+  Future<List<User>> getAllUsersWithStatus() async {
+    final db = await instance.database;
+    final maps = await db.query('users', orderBy: 'fullName COLLATE NOCASE');
+    return maps.map((m) => User.fromMap(m)).toList();
   }
 }

@@ -11,6 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:kaawa_mobile/forgot_password_screen.dart';
 import 'package:kaawa_mobile/contact_admin_screen.dart';
+import 'package:kaawa_mobile/admin_registration_screen.dart';
+import 'package:kaawa_mobile/admin_home_screen.dart';
 
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
@@ -39,6 +41,11 @@ class _InitialScreenState extends State<InitialScreen> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => FarmerHomeScreen(farmer: user)),
+            );
+          } else if (user.userType == UserType.admin.toString()) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => AdminHomeScreen(admin: user)),
             );
           } else {
             Navigator.pushReplacement(
@@ -71,17 +78,22 @@ class WelcomeScreen extends StatelessWidget {
           children: [
             Column(
               children: [
-                // Top image with rounded bottom corners
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    bottomLeft: Radius.circular(40),
-                    bottomRight: Radius.circular(40),
-                  ),
-                  child: Image.asset(
-                    'assets/images/seeds.jpg',
-                    width: double.infinity,
-                    height: MediaQuery.of(context).size.height * 0.45,
-                    fit: BoxFit.cover,
+                // Top image with rounded bottom corners. Long-press the image to open the hidden Admin registration.
+                GestureDetector(
+                  onLongPress: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminRegistrationScreen()));
+                  },
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(40),
+                      bottomRight: Radius.circular(40),
+                    ),
+                    child: Image.asset(
+                      'assets/images/seeds.jpg',
+                      width: double.infinity,
+                      height: MediaQuery.of(context).size.height * 0.45,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
 
@@ -156,6 +168,30 @@ class WelcomeScreen extends StatelessWidget {
                           ),
                           child: Text(
                             'Register as Farmer',
+                            style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Register as Buyer button
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const BuyerRegistrationScreen()),
+                            );
+                          },
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                            side: BorderSide(color: theme.colorScheme.primary),
+                          ),
+                          child: Text(
+                            'Register as Buyer',
                             style: theme.textTheme.labelLarge?.copyWith(color: theme.colorScheme.primary),
                           ),
                         ),

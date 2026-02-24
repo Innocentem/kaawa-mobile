@@ -202,7 +202,46 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     return Scaffold(
       appBar: AppBar(
         backgroundColor: theme.colorScheme.primary,
-        title: Text('Welcome, ${widget.farmer.fullName}'),
+        title: Semantics(
+          label: 'Open profile',
+          button: true,
+          child: Tooltip(
+            message: 'Open profile',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(28),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: widget.farmer),
+                  ),
+                );
+              },
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AppAvatar(filePath: widget.farmer.profilePicturePath, imageUrl: widget.farmer.profilePicturePath, size: 44),
+                  if (_unreadMessageCount > 0)
+                    Positioned(
+                      right: -8,
+                      top: -8,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
+                        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                        child: Center(
+                          child: Text(
+                            _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),

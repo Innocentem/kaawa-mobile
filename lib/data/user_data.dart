@@ -1,4 +1,4 @@
-enum UserType { farmer, buyer }
+enum UserType { farmer, buyer, admin }
 
 class User {
   final int? id;
@@ -10,6 +10,12 @@ class User {
   final String? profilePicturePath;
   final double? latitude;
   final double? longitude;
+  // whether user must change password on next login
+  final bool mustChangePassword;
+  // optional suspension until ISO timestamp
+  final DateTime? suspendedUntil;
+  // optional suspension reason provided by admin
+  final String? suspensionReason;
 
   // Farmer-specific fields
   final String? village;
@@ -25,6 +31,9 @@ class User {
     this.latitude,
     this.longitude,
     this.village,
+    this.mustChangePassword = false,
+    this.suspendedUntil,
+    this.suspensionReason,
   });
 
   Map<String, dynamic> toMap() {
@@ -39,6 +48,9 @@ class User {
       'latitude': latitude,
       'longitude': longitude,
       'village': village,
+      'mustChangePassword': mustChangePassword ? 1 : 0,
+      'suspendedUntil': suspendedUntil?.toIso8601String(),
+      'suspensionReason': suspensionReason,
     };
   }
 
@@ -54,6 +66,9 @@ class User {
       latitude: map['latitude'],
       longitude: map['longitude'],
       village: map['village'],
+      mustChangePassword: (map['mustChangePassword'] == null) ? false : (map['mustChangePassword'] == 1 || map['mustChangePassword'] == true),
+      suspendedUntil: (map['suspendedUntil'] == null) ? null : DateTime.tryParse(map['suspendedUntil'].toString()),
+      suspensionReason: map['suspensionReason']?.toString(),
     );
   }
 }

@@ -10,9 +10,9 @@ import 'package:kaawa_mobile/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/widgets/listing_image.dart';
 import 'package:kaawa_mobile/widgets/listing_carousel.dart';
 import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/app_avatar.dart';
 import 'package:kaawa_mobile/product_detail_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
@@ -138,7 +138,50 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     return Scaffold(
       appBar: AppBar(
         backgroundColor: theme.colorScheme.primary,
-        title: Text('Welcome, ${widget.buyer.fullName}'),
+        title: Semantics(
+          label: 'Open profile',
+          button: true,
+          child: Tooltip(
+            message: 'Open profile',
+            child: InkWell(
+              borderRadius: BorderRadius.circular(24),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: widget.buyer),
+                  ),
+                );
+              },
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AppAvatar(
+                    filePath: widget.buyer.profilePicturePath,
+                    imageUrl: widget.buyer.profilePicturePath,
+                    size: 40,
+                  ),
+                  if (_unreadMessageCount > 0)
+                    Positioned(
+                      right: -6,
+                      top: -6,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
+                        constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                        child: Center(
+                          child: Text(
+                            _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),
@@ -369,9 +412,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                     IconButton(
                                                       icon: const Icon(Icons.call),
                                                       onPressed: () async {
-                                                        if (stock.farmerId != null) {
-                                                          _onCallPressed(stock.farmerId);
-                                                        }
+                                                        _onCallPressed(stock.farmerId);
                                                       },
                                                     ),
                                                     IconButton(

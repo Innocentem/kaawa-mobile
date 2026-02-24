@@ -8,6 +8,8 @@ import 'package:kaawa_mobile/buyer_home_screen.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/forgot_password_screen.dart';
 import 'package:kaawa_mobile/contact_admin_screen.dart';
+import 'package:kaawa_mobile/change_password_screen.dart';
+import 'package:kaawa_mobile/admin_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -93,6 +95,32 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (user != null) {
                       final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
                       if (user.password == hashedPassword) {
+                        // check suspension
+                        if (user.suspendedUntil != null && user.suspendedUntil!.isAfter(DateTime.now())) {
+                          await showDialog<void>(
+                            context: context,
+                            builder: (c) => AlertDialog(
+                              title: const Text('Account suspended'),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
+                                  const SizedBox(height: 8),
+                                  if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
+                                    Text('Reason: ${user.suspensionReason}'),
+                                  const SizedBox(height: 12),
+                                  const Text('If you believe this is a mistake, contact admin.'),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+                                TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (ctx) => const ContactAdminScreen())), child: const Text('Contact Admin')),
+                              ],
+                            ),
+                          );
+                          return;
+                        }
                         if (_keepLoggedIn) {
                           await _authService.login(user.id!);
                         }
@@ -104,6 +132,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               builder: (context) => FarmerHomeScreen(farmer: user),
                             ),
                           );
+                        } else if (user.userType == UserType.admin) {
+                          if (user.mustChangePassword) {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (c) => ChangePasswordScreen(user: user)),
+                            );
+                          } else {
+                            Navigator.pushReplacement(
+                              context,
+                              MaterialPageRoute(builder: (c) => AdminHomeScreen(admin: user)),
+                            );
+                          }
                         } else {
                           Navigator.pushReplacement(
                             context,
