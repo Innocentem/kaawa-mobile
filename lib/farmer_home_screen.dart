@@ -605,3 +605,4 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     );
   }
 }
+
