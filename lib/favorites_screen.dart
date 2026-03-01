@@ -3,7 +3,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/profile_screen.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 
 class FavoritesScreen extends StatefulWidget {
   final User currentUser;
@@ -37,48 +37,62 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         future: _favoritesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
+            return Center(
+              child: SizedBox(
+                height: 200,
+                child: const Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading favorites')),
+              ),
+            );
           } else if (snapshot.hasError) {
             return const Center(child: Text('Error loading favorites.'));
           } else {
             final favorites = snapshot.data ?? [];
-            return favorites.isEmpty
-                ? const Center(
-                    child: Text(
-                      'You have no favorites yet.\n\nAdd farmers and buyers to your favorites to see them here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
+
+            if (favorites.isEmpty) {
+              return Center(
+                child: Text(
+                  'You have no favorites yet.\n\nAdd farmers and buyers to your favorites to see them here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    color: Theme.of(context).textTheme.bodySmall == null ? null : Theme.of(context).textTheme.bodySmall!.color!.withAlpha((0.7 * 255).round()),
+                  ),
+                ),
+              );
+            }
+
+            return ListView.builder(
+              itemCount: favorites.length,
+              itemBuilder: (context, index) {
+                final favoriteUser = favorites[index];
+                return Card(
+                  margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  child: ListTile(
+                    leading: Hero(
+                      tag: favoriteUser.id != null ? 'avatar-${favoriteUser.id}' : UniqueKey(),
+                      child: AppAvatar(
+                        filePath: favoriteUser.profilePicturePath,
+                        imageUrl: favoriteUser.profilePicturePath,
+                        size: 48,
+                      ),
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: favorites.length,
-                    itemBuilder: (context, index) {
-                      final favoriteUser = favorites[index];
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                        child: ListTile(
-                          leading: AppAvatar(
-                            filePath: favoriteUser.profilePicturePath,
-                            imageUrl: favoriteUser.profilePicturePath, // support both file paths and remote urls
-                            size: 48,
+                    title: Text(favoriteUser.fullName),
+                    subtitle: Text(favoriteUser.district),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfileScreen(
+                            currentUser: widget.currentUser,
+                            profileOwner: favoriteUser,
                           ),
-                          title: Text(favoriteUser.fullName),
-                          subtitle: Text(favoriteUser.district),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfileScreen(
-                                  currentUser: widget.currentUser,
-                                  profileOwner: favoriteUser,
-                                ),
-                              ),
-                            );
-                          },
                         ),
                       );
                     },
-                  );
+                  ),
+                );
+              },
+            );
           }
         },
       ),

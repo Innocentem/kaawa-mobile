@@ -137,10 +137,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       Hero(
                         tag: widget.profileOwner.id != null ? 'avatar-${widget.profileOwner.id}' : UniqueKey(),
-                        child: AppAvatar(
-                          filePath: _profilePicturePath,
-                          imageUrl: _profilePicturePath,
-                          size: 72,
+                        child: Material(
+                          type: MaterialType.transparency,
+                          child: AppAvatar(
+                            filePath: _profilePicturePath,
+                            imageUrl: _profilePicturePath,
+                            size: 72,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -302,7 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           labelText: label,
           border: const OutlineInputBorder(),
           filled: !isEnabled,
-          fillColor: Colors.grey[200],
+          fillColor: !isEnabled ? (Theme.of(context).colorScheme.surfaceVariant ?? Theme.of(context).colorScheme.surface.withAlpha((0.06*255).round())) : null,
         ),
         readOnly: !isEnabled,
         keyboardType: keyboardType,

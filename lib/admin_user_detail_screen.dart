@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/compact_loader.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'admin/admin_user_listings_screen.dart';
@@ -123,7 +124,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             FutureBuilder<Map<String, dynamic>>(
               future: _activityFuture,
               builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) return const CircularProgressIndicator();
+                if (snap.connectionState != ConnectionState.done) return const CompactLoader();
                 final data = snap.data ?? {};
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

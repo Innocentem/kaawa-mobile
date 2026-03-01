@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/review_data.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
 
 class ViewReviewsScreen extends StatefulWidget {
@@ -45,7 +45,7 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
         future: _reviewsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: SizedBox(height: 160, child: ShimmerSkeleton.rect()));
+            return const Center(child: SizedBox(height: 160, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading reviews'))));
           } else if (snapshot.hasError) {
             return const Center(child: Text('Error loading reviews.'));
           } else {
@@ -81,7 +81,7 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
                                           },
                                     child: Hero(
                                       tag: reviewer != null && reviewer.id != null ? 'avatar-${reviewer.id}' : UniqueKey(),
-                                      child: AppAvatar(filePath: reviewer?.profilePicturePath, imageUrl: reviewer?.profilePicturePath, size: 40),
+                                      child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: reviewer?.profilePicturePath, imageUrl: reviewer?.profilePicturePath, size: 40)),
                                     ),
                                   ),
                                   const SizedBox(width: 12),
@@ -103,7 +103,7 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
                                             children: List.generate(5, (starIndex) {
                                               return Icon(
                                                 starIndex < rating ? Icons.star : Icons.star_border,
-                                                color: Colors.amber,
+                                                color: IconTheme.of(context).color ?? Theme.of(context).colorScheme.secondary,
                                                 size: 18,
                                               );
                                             }),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
+import '../../widgets/compact_loader.dart';
 
 class AdminUserListingsScreen extends StatefulWidget {
   final int userId;
@@ -26,7 +27,7 @@ class _AdminUserListingsScreenState extends State<AdminUserListingsScreen> {
       body: FutureBuilder<List<CoffeeStock>>(
         future: _listingsFuture,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
           final items = snap.data ?? [];
           if (items.isEmpty) return const Center(child: Text('No listings'));
           return ListView.separated(
@@ -49,4 +50,3 @@ class _AdminUserListingsScreenState extends State<AdminUserListingsScreen> {
     );
   }
 }
-

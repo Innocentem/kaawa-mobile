@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
+import 'widgets/compact_loader.dart';
 
 class AdminScreen extends StatefulWidget {
   const AdminScreen({super.key});
@@ -61,7 +61,7 @@ class _AdminScreenState extends State<AdminScreen> {
         child: _authenticated ? FutureBuilder<List<Map<String, dynamic>>>(
           future: DatabaseHelper.instance.getPendingPasswordResetRequests(),
           builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
             final rows = snap.data ?? [];
             if (rows.isEmpty) return const Center(child: Text('No pending password reset requests'));
             return RefreshIndicator(
@@ -99,7 +99,7 @@ class _AdminScreenState extends State<AdminScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loading ? null : _login,
-              child: _loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Login as Admin'),
+              child: _loading ? const SizedBox(width: 20, height: 20, child: CompactLoader(size:20, strokeWidth:2.0)) : const Text('Login as Admin'),
             ),
           ],
         ),

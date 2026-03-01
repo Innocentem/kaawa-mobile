@@ -7,7 +7,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/interested_buyers_screen.dart';
 import 'package:kaawa_mobile/widgets/listing_image.dart';
 import 'package:kaawa_mobile/widgets/listing_carousel.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -71,11 +71,11 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.all(16.0),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
             child: Text(
               'Use the pencil icon to edit a listing, and the checkmark icon to mark it as sold.',
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Colors.grey),
+              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Theme.of(context).textTheme.bodySmall?.color?.withAlpha((0.8 * 255).round())),
             ),
           ),
           Expanded(
@@ -83,7 +83,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
               future: _stockFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: SizedBox(width: double.infinity, height: 200, child: ShimmerSkeleton.rect()));
+                  return const Center(child: SizedBox(width: double.infinity, height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading listings'))));
                 } else if (snapshot.hasError) {
                   return const Center(child: Text('Error loading stock.'));
                 } else {
@@ -121,8 +121,8 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                                   top: -6,
                                                   child: Container(
                                                     padding: const EdgeInsets.all(4),
-                                                    decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                                                    child: Text('$count', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                                                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.error, shape: BoxShape.circle),
+                                                    child: Text('$count', style: TextStyle(color: Theme.of(context).colorScheme.onError, fontSize: 10)),
                                                   ),
                                                 ),
                                             ],

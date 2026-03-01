@@ -4,7 +4,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/message_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:intl/intl.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 
 class ChatScreen extends StatefulWidget {
   final User currentUser;
@@ -75,6 +75,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.otherUser.fullName),
@@ -104,7 +105,7 @@ class _ChatScreenState extends State<ChatScreen> {
               future: _messagesFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
+                  return const Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading messages'))));
                 } else if (snapshot.hasError) {
                   return const Center(child: Text('Error loading messages.'));
                 } else {
@@ -120,7 +121,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isMe ? Theme.of(context).primaryColor : Colors.grey[300],
+                            color: isMe ? theme.colorScheme.primary : theme.cardColor,
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Column(
@@ -128,14 +129,14 @@ class _ChatScreenState extends State<ChatScreen> {
                             children: [
                               Text(
                                 message.text,
-                                style: TextStyle(color: isMe ? Colors.white : Colors.black),
+                                style: TextStyle(color: isMe ? theme.colorScheme.onPrimary : theme.colorScheme.onSurface),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 DateFormat.jm().format(message.timestamp),
                                 style: TextStyle(
                                   fontSize: 10,
-                                  color: isMe ? Colors.white70 : Colors.black54,
+                                  color: isMe ? theme.colorScheme.onPrimary.withAlpha((0.7 * 255).round()) : theme.colorScheme.onSurface.withAlpha((0.6 * 255).round()),
                                 ),
                               ),
                             ],

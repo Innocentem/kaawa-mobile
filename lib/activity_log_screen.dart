@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:intl/intl.dart';
+import 'widgets/compact_loader.dart';
 
 class ActivityLogScreen extends StatefulWidget {
   final int userId;
@@ -38,7 +39,7 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
         future: _logFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CompactLoader());
           }
           if (snapshot.hasError) {
             return Center(child: Text('Error loading log: ${snapshot.error}'));

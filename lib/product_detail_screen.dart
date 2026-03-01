@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/widgets/listing_image.dart';
 import 'package:kaawa_mobile/widgets/listing_carousel.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
@@ -36,18 +35,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final parts = pathField.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
     if (parts.isEmpty) return [null];
     return parts;
-  }
-
-  void _previousImage() {
-    setState(() {
-      photoIndex = photoIndex > 0 ? photoIndex - 1 : 0;
-    });
-  }
-
-  void _nextImage() {
-    setState(() {
-      photoIndex = photoIndex < photos.length - 1 ? photoIndex + 1 : photoIndex;
-    });
   }
 
   Future<void> _loadInterestedCount() async {
@@ -106,7 +93,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             padding: const EdgeInsets.all(8.0),
                             child: Row(
                               children: [
-                                const Icon(Icons.favorite, color: Colors.red),
+                                Icon(Icons.favorite, color: theme.colorScheme.error),
                                 const SizedBox(width: 6),
                                 Text('$_interestedCount')
                               ],
@@ -162,7 +149,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(widget.stock.description ?? ''),
+                  child: Text(widget.stock.description),
                 ),
               ],
             ),

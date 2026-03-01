@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
+import 'widgets/compact_loader.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   final User user;
@@ -70,7 +71,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _saving ? null : _save,
-                child: _saving ? const CircularProgressIndicator() : const Text('Save'),
+                child: _saving ? const CompactLoader(size:18, strokeWidth:2.0, semanticsLabel: 'Saving') : const Text('Save'),
               ),
             ],
           ),
@@ -79,4 +80,3 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     );
   }
 }
-

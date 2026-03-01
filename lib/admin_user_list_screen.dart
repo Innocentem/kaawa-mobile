@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import './admin_user_detail_screen.dart';
+import '../widgets/compact_loader.dart';
 
 class AdminUserListScreen extends StatefulWidget {
   const AdminUserListScreen({super.key});
@@ -25,7 +26,10 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
 
   Widget _statusBadge(User u) {
     if (u.suspendedUntil != null && u.suspendedUntil!.isAfter(DateTime.now())) {
-      return Chip(label: Text('Suspended until ${u.suspendedUntil!.toLocal().toString().split('.').first}'), backgroundColor: Colors.red.shade200);
+      return Chip(
+        label: Text('Suspended until ${u.suspendedUntil!.toLocal().toString().split('.').first}'),
+        backgroundColor: Theme.of(context).colorScheme.errorContainer,
+      );
     }
     return const SizedBox.shrink();
   }
@@ -37,7 +41,7 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
       body: FutureBuilder<List<User>>(
         future: _usersFuture,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
           final users = snap.data ?? [];
           return RefreshIndicator(
             onRefresh: _refresh,

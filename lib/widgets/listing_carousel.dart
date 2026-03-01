@@ -72,10 +72,10 @@ class _ListingCarouselState extends State<ListingCarousel> {
                   width: active ? 18 : 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: active ? Colors.white : Colors.white54,
+                    color: active ? Theme.of(context).colorScheme.onSurface : Theme.of(context).colorScheme.onSurface.withAlpha((0.54 * 255).round()),
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: active
-                        ? [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1))]
+                        ? [BoxShadow(color: Theme.of(context).shadowColor.withAlpha((0.4 * 255).round()), blurRadius: 4, offset: Offset(0, 1))]
                         : null,
                   ),
                 );

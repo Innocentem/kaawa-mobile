@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/data/conversation_data.dart';
 import './admin_conversation_screen.dart' as acs;
+import '../widgets/compact_loader.dart';
 
 class AdminConversationsListScreen extends StatefulWidget {
   final int userId;
@@ -27,7 +28,7 @@ class _AdminConversationsListScreenState extends State<AdminConversationsListScr
       body: FutureBuilder<List<Conversation>>(
         future: _convsFuture,
         builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
           final convs = snap.data ?? [];
           if (convs.isEmpty) return const Center(child: Text('No conversations'));
           return ListView.separated(

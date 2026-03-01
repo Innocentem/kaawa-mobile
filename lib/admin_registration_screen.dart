@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'widgets/compact_loader.dart';
 
 // NOTE: These are the single credentials the app will accept to create an admin account.
 // For production, do NOT hard-code credentials. Use a secure server-driven invite/token flow.
@@ -114,7 +115,7 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _submitting ? null : _registerAdmin,
-                child: _submitting ? const CircularProgressIndicator() : const Text('Register as Admin'),
+                child: _submitting ? const CompactLoader(size:18, strokeWidth:2.0, semanticsLabel: 'Registering admin') : const Text('Register as Admin'),
               ),
             ],
           ),

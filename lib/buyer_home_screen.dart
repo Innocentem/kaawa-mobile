@@ -11,7 +11,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/widgets/listing_carousel.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
 import 'package:kaawa_mobile/product_detail_screen.dart';
 
@@ -138,6 +138,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     return Scaffold(
       appBar: AppBar(
         backgroundColor: theme.colorScheme.primary,
+        // ensure icons use the onPrimary color for contrast
+        foregroundColor: theme.colorScheme.onPrimary,
+        iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+        actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
         title: Semantics(
           label: 'Open profile',
           button: true,
@@ -156,23 +160,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  AppAvatar(
-                    filePath: widget.buyer.profilePicturePath,
-                    imageUrl: widget.buyer.profilePicturePath,
-                    size: 40,
-                  ),
+                  Hero(tag: widget.buyer.id != null ? 'avatar-${widget.buyer.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: widget.buyer.profilePicturePath, imageUrl: widget.buyer.profilePicturePath, size: 40))),
                   if (_unreadMessageCount > 0)
                     Positioned(
                       right: -6,
                       top: -6,
                       child: Container(
                         padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
+                        decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.onError, width: 1.5)),
                         constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                         child: Center(
                           child: Text(
                             _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: theme.colorScheme.onError, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -184,7 +184,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.brightness_6),
+            icon: Icon(
+              Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+              color: IconTheme.of(context).color ?? theme.colorScheme.onSurface,
+            ),
             onPressed: () {
               Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
             },
@@ -209,7 +212,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                   child: Container(
                     padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: theme.colorScheme.error,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     constraints: const BoxConstraints(
@@ -218,8 +221,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                     ),
                     child: Text(
                       '$_unreadMessageCount',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: theme.colorScheme.onError,
                         fontSize: 10,
                       ),
                       textAlign: TextAlign.center,
@@ -254,7 +257,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
             const SizedBox(height: 8),
             Text(
               'Tap on a listing to view farmer details. Use the message icon to inquire or the cart icon to buy.',
-              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: Colors.grey),
+              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.textTheme.bodySmall?.color?.withAlpha((0.75 * 255).round())),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -271,7 +274,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                 future: _coffeeStockFuture,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
+                    return Center(child: const SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading coffee stock'))));
                   } else if (snapshot.hasError) {
                     return const Center(child: Text('Error loading coffee stock.'));
                   } else {
@@ -354,7 +357,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                 Row(
                                                   children: [
                                                     IconButton(
-                                                      icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? Colors.red : Colors.grey),
+                                                      icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? theme.colorScheme.error : (IconTheme.of(context).color ?? theme.textTheme.bodySmall?.color)),
                                                       onPressed: () async {
                                                         if (stockId == null) return;
                                                         if (liked) {

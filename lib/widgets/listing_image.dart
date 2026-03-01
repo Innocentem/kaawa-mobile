@@ -34,11 +34,16 @@ class ListingImage extends StatelessWidget {
             imageUrl: path!,
             fit: fit,
             fadeInDuration: const Duration(milliseconds: 250),
-            placeholder: (context, url) => Shimmer.fromColors(
-              baseColor: Colors.grey.shade300,
-              highlightColor: Colors.grey.shade100,
-              child: Container(color: Colors.white),
-            ),
+            placeholder: (context, url) {
+              final theme = Theme.of(context);
+              final base = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.6 : 0.25);
+              final highlight = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.85 : 0.6);
+              return Shimmer.fromColors(
+                baseColor: base,
+                highlightColor: highlight,
+                child: Container(color: theme.colorScheme.surface),
+              );
+            },
             errorWidget: (context, url, error) => Image.asset(fallback, fit: fit),
           );
         }

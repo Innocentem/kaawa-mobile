@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'widgets/compact_loader.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -41,7 +42,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             const SizedBox(height: 12),
             ElevatedButton(
               onPressed: _loading ? null : _requestReset,
-              child: _loading ? const CircularProgressIndicator() : const Text('Request Reset'),
+              child: _loading ? const CompactLoader(size:20, strokeWidth:2.0, semanticsLabel: 'Requesting password reset') : const Text('Request Reset'),
             ),
           ],
         ),

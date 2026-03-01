@@ -39,11 +39,16 @@ class AppAvatar extends StatelessWidget {
           fit: fit,
           fadeInDuration: const Duration(milliseconds: 250),
           // shimmer placeholder while loading
-          placeholder: (context, url) => Shimmer.fromColors(
-            baseColor: Colors.grey.shade300,
-            highlightColor: Colors.grey.shade100,
-            child: Container(width: size, height: size, color: Colors.white),
-          ),
+          placeholder: (context, url) {
+            final theme = Theme.of(context);
+            final base = theme.colorScheme.surface.withOpacity(0.6);
+            final highlight = theme.colorScheme.surface.withOpacity(0.85);
+            return Shimmer.fromColors(
+              baseColor: base,
+              highlightColor: highlight,
+              child: Container(width: size, height: size, color: theme.colorScheme.surface),
+            );
+          },
           // fallback if network fails
           errorWidget: (context, url, error) => Image.asset(fallbackAsset, width: size, height: size, fit: fit),
         );

@@ -4,7 +4,7 @@ import 'package:kaawa_mobile/data/coffee_stock_data.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 
 class InterestedBuyersScreen extends StatefulWidget {
   final User farmer;
@@ -36,7 +36,7 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
       body: FutureBuilder<List<User>>(
         future: _buyersFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: SizedBox(height: 160, child: ShimmerSkeleton.rect()));
+          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox(height: 160, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading buyers'))));
           if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
           final buyers = snapshot.data ?? [];
           if (buyers.isEmpty) return const Center(child: Text('No interested buyers yet.'));
@@ -45,7 +45,7 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
             itemBuilder: (context, index) {
               final b = buyers[index];
               return ListTile(
-                leading: AppAvatar(filePath: b.profilePicturePath, imageUrl: b.profilePicturePath, size: 44),
+                leading: Hero(tag: b.id != null ? 'avatar-${b.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: b.profilePicturePath, imageUrl: b.profilePicturePath, size: 44))),
                 title: Text(b.fullName),
                 subtitle: Text(b.district),
                 trailing: IconButton(

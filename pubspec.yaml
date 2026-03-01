@@ -40,3 +40,12 @@ flutter:
     - assets/images/avatar.jpg
     - assets/images/fallback.jpg
     - assets/images/seeds.jpg
+  fonts:
+    - family: Quicksand
+      fonts:
+        - asset: fonts/Quicksand-VariableFont_wght.ttf
+          weight: 400
+        - asset: fonts/Quicksand-VariableFont_wght.ttf
+          weight: 700
+        - asset: fonts/Quicksand-VariableFont_wght.ttf
+          style: italic

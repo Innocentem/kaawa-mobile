@@ -28,13 +28,17 @@ class ShimmerSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final base = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.6 : 0.25);
+    final highlight = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.85 : 0.6);
+    final bg = theme.colorScheme.surface;
     return Shimmer.fromColors(
-      baseColor: Colors.grey.shade300,
-      highlightColor: Colors.grey.shade100,
+      baseColor: base,
+      highlightColor: highlight,
       child: Container(
         width: width ?? double.infinity,
         height: height ?? 16,
-        decoration: BoxDecoration(color: Colors.white, borderRadius: borderRadius),
+        decoration: BoxDecoration(color: bg, borderRadius: borderRadius),
       ),
     );
   }

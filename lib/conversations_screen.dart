@@ -4,7 +4,7 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/chat_screen.dart';
 import 'package:kaawa_mobile/data/conversation_data.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/shimmer_skeleton.dart';
+import 'package:kaawa_mobile/widgets/compact_loader.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final User currentUser;
@@ -38,7 +38,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         future: _conversationsFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: SizedBox(height: 200, child: ShimmerSkeleton.rect()));
+            return const Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading conversations'))));
           } else if (snapshot.hasError) {
             return Center(child: Text('Error loading conversations: ${snapshot.error}'));
           } else {
@@ -54,11 +54,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       final coffeeStock = conversation.coffeeStock;
 
                       return ListTile(
-                        leading: AppAvatar(
-                          filePath: otherUser.profilePicturePath,
-                          imageUrl: otherUser.profilePicturePath,
-                          size: 40,
-                        ),
+                        leading: Hero(tag: otherUser.id != null ? 'avatar-${otherUser.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: otherUser.profilePicturePath, imageUrl: otherUser.profilePicturePath, size: 40))),
                         title: Text(otherUser.fullName),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,7 +75,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         ),
                         trailing: lastMessage.isRead
                             ? null
-                            : const Icon(Icons.circle, color: Colors.red, size: 12),
+                            : Icon(Icons.circle, color: Theme.of(context).colorScheme.error, size: 12),
                         onTap: () {
                           Navigator.push(
                             context,
