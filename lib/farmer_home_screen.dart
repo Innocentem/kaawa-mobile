@@ -142,7 +142,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
       await launchUrl(launchUri);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch dialer for $phoneNumber')),
+        SnackBar(content: Text('Could not launch dialer for $phoneNumber')), 
       );
     }
   }
@@ -425,7 +425,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                             },
                                             child: Padding(
                                               padding: const EdgeInsets.only(left: 8.0),
-                                              child: Hero(tag: buyers[0].id != null ? 'avatar-${buyers[0].id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: buyers[0].profilePicturePath, imageUrl: buyers[0].profilePicturePath, size: 32))),
+                                              child: Hero(tag: buyers[0].id != null ? 'avatar-${buyers[0].id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: buyers[0].profilePicturePath, imageUrl: buyers[0].profilePicturePath, size: avatarSize))),
                                             ),
                                           ),
                                       ],
@@ -463,9 +463,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                 ),
                               ),
                             ),
-                          ),
-                          ),
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
