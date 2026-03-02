@@ -36,6 +36,31 @@ class User {
     this.suspensionReason,
   });
 
+  bool get isSuspended {
+    if (userType == UserType.admin) return false;
+    final until = suspendedUntil;
+    return until != null && until.isAfter(DateTime.now());
+  }
+
+  Duration? get suspensionRemaining {
+    if (!isSuspended) return null;
+    return suspendedUntil!.difference(DateTime.now());
+  }
+
+  String? get suspensionRemainingText {
+    final remaining = suspensionRemaining;
+    if (remaining == null) return null;
+    final totalMinutes = remaining.inMinutes.clamp(0, 1 << 30);
+    final days = totalMinutes ~/ (60 * 24);
+    final hours = (totalMinutes % (60 * 24)) ~/ 60;
+    final minutes = totalMinutes % 60;
+    final parts = <String>[];
+    if (days > 0) parts.add('${days}d');
+    if (hours > 0 || days > 0) parts.add('${hours}h');
+    parts.add('${minutes}m');
+    return parts.join(' ');
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

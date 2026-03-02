@@ -25,7 +25,7 @@ class FarmerHomeScreen extends StatefulWidget {
   State<FarmerHomeScreen> createState() => _FarmerHomeScreenState();
 }
 
-class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProviderStateMixin {
+class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late Future<List<User>> _buyersFuture;
   List<User> _allBuyers = [];
   List<User> _filteredBuyers = [];
@@ -44,6 +44,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkSuspensionAndLogout();
     _buyersFuture = _getBuyers();
     _searchController.addListener(_filterBuyers);
     _loadFavorites();
@@ -65,9 +67,58 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     _animationController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkSuspensionAndLogout();
+    }
+  }
+
+  Future<void> _checkSuspensionAndLogout() async {
+    final current = await DatabaseHelper.instance.getUserById(widget.farmer.id!);
+    if (current == null || !current.isSuspended) return;
+    await _auth_service.logout();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final remaining = current.suspensionRemainingText;
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Account suspended'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your account is suspended until ${current.suspendedUntil!.toLocal()}.'),
+              if (remaining != null) ...[
+                const SizedBox(height: 6),
+                Text('Time left: $remaining'),
+              ],
+              const SizedBox(height: 8),
+              if (current.suspensionReason != null && current.suspensionReason!.isNotEmpty)
+                Text('Reason: ${current.suspensionReason}'),
+              const SizedBox(height: 12),
+              const Text('If you believe this is a mistake, contact admin.'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+        (route) => false,
+      );
+    });
   }
 
   Future<void> _loadFavorites() async {
@@ -426,7 +477,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                               },
                                               child: Padding(
                                                 padding: const EdgeInsets.only(left: 8.0),
-                                                child: Hero(tag: buyers[0].id != null ? 'avatar-${buyers[0].id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: buyers[0].profilePicturePath, imageUrl: buyers[0].profilePicturePath, size: avatarSize))),
+                                                child: Hero(
+                                                  tag: buyers[0].id != null ? 'avatar-${buyers[0].id}' : UniqueKey(),
+                                                  child: Material(
+                                                    type: MaterialType.transparency,
+                                                    child: AppAvatar(
+                                                      filePath: buyers[0].profilePicturePath,
+                                                      imageUrl: buyers[0].profilePicturePath,
+                                                      size: avatarSize,
+                                                    ),
+                                                  ),
+                                                ),
                                               ),
                                             ),
                                         ],
@@ -434,12 +495,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                       const SizedBox(height: 6),
                                       Text('${buyers.length} interested', style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
                                       const SizedBox(height: 6),
-                                      Wrap(
-                                        spacing: 6,
-                                        runSpacing: 6,
-                                        children: List.generate(
-                                          buyers.length > 3 ? 3 : buyers.length,
-                                          (i) => Hero(tag: buyers[i].id != null ? 'avatar-${buyers[i].id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: buyers[i].profilePicturePath, imageUrl: buyers[i].profilePicturePath, size: avatarSize))),
+                                      Flexible(
+                                        fit: FlexFit.loose,
+                                        child: Wrap(
+                                          spacing: 6,
+                                          runSpacing: 6,
+                                          children: List.generate(
+                                            buyers.length > 3 ? 3 : buyers.length,
+                                            (i) => AppAvatar(
+                                              filePath: buyers[i].profilePicturePath,
+                                              imageUrl: buyers[i].profilePicturePath,
+                                              size: avatarSize,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(height: 6),

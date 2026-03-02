@@ -4,6 +4,8 @@ import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'admin/admin_user_listings_screen.dart';
 import 'admin/admin_conversations_list_screen.dart';
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
   final User user;
@@ -15,29 +17,86 @@ class AdminUserDetailScreen extends StatefulWidget {
 
 class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   late Future<Map<String, dynamic>> _activityFuture;
+  late User _user;
 
   @override
   void initState() {
     super.initState();
+    _user = widget.user;
     _activityFuture = DatabaseHelper.instance.getUserActivitySummary(widget.user.id!);
+    _reloadUser();
+  }
+
+  Future<void> _reloadUser() async {
+    final fresh = await DatabaseHelper.instance.getUserById(widget.user.id!);
+    if (fresh == null) return;
+    if (!mounted) return;
+    setState(() => _user = fresh);
   }
 
   Future<void> _suspend(Duration d) async {
     final until = DateTime.now().add(d);
     await DatabaseHelper.instance.suspendUser(widget.user.id!, until);
-    setState(() {});
+    await _reloadUser();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('User suspended until ${until.toLocal()}')));
   }
 
   Future<void> _unsuspend() async {
     await DatabaseHelper.instance.unsuspendUser(widget.user.id!);
-    setState(() {});
+    await _reloadUser();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User unsuspended')));
+  }
+
+  Future<void> _resetPassword() async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Reset password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Set a temporary password for this user.'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Temporary password',
+                hintText: 'Minimum 6 characters',
+              ),
+              obscureText: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Reset')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final tempPassword = controller.text.trim();
+    if (tempPassword.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Temporary password must be at least 6 characters.')));
+      return;
+    }
+
+    final hash = sha256.convert(utf8.encode(tempPassword)).toString();
+    final ok = await DatabaseHelper.instance.adminSetUserPasswordById(widget.user.id!, hash);
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to reset password.')));
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Password reset. Share the temporary password with the user.')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final u = widget.user;
+    final u = _user;
     return Scaffold(
       appBar: AppBar(title: Text(u.fullName)),
       body: Padding(
@@ -94,6 +153,11 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                       onPressed: () async {
                         await _pickCustomSuspend();
                       },
+                    ),
+                    makeButton(
+                      icon: Icons.lock_reset,
+                      label: 'Reset password',
+                      onPressed: _resetPassword,
                     ),
                     makeButton(
                       icon: Icons.remove_circle_outline,
@@ -191,7 +255,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     if (confirmed == true) {
       final reason = reasonController.text.trim().isEmpty ? null : reasonController.text.trim();
       await DatabaseHelper.instance.suspendUserWithReason(widget.user.id!, until, reason);
-      setState(() {});
+      await _reloadUser();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('User suspended until ${until.toLocal()}')));
     }
   }

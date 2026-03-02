@@ -23,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phoneNumberController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _keepLoggedIn = false;
+  bool _showResetBanner = false;
   final AuthService _authService = AuthService();
 
   @override
@@ -37,6 +38,16 @@ class _LoginScreenState extends State<LoginScreen> {
           key: _formKey,
           child: Column(
             children: <Widget>[
+              if (_showResetBanner)
+                MaterialBanner(
+                  content: const Text('Password reset by admin — change required.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => setState(() => _showResetBanner = false),
+                      child: const Text('Dismiss'),
+                    ),
+                  ],
+                ),
               TextFormField(
                 controller: _phoneNumberController,
                 decoration: const InputDecoration(labelText: 'Phone Number'),
@@ -89,40 +100,55 @@ class _LoginScreenState extends State<LoginScreen> {
               ElevatedButton(
                 onPressed: () async {
                   if (_formKey.currentState!.validate()) {
-                    final phoneNumber = _phoneNumberController.text;
+                    final phoneNumber = _phoneNumberController.text.trim();
                     final user = await DatabaseHelper.instance.getUser(phoneNumber);
 
                     if (user != null) {
-                      final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
-                      if (user.password == hashedPassword) {
-                        // check suspension
-                        if (user.suspendedUntil != null && user.suspendedUntil!.isAfter(DateTime.now())) {
-                          await showDialog<void>(
-                            context: context,
-                            builder: (c) => AlertDialog(
-                              title: const Text('Account suspended'),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
-                                  const SizedBox(height: 8),
-                                  if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
-                                    Text('Reason: ${user.suspensionReason}'),
-                                  const SizedBox(height: 12),
-                                  const Text('If you believe this is a mistake, contact admin.'),
+                      setState(() {
+                        _showResetBanner = user.mustChangePassword;
+                      });
+                      if (user.isSuspended) {
+                        final remaining = user.suspensionRemainingText;
+                        await showDialog<void>(
+                          context: context,
+                          builder: (c) => AlertDialog(
+                            title: const Text('Account suspended'),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
+                                if (remaining != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text('Time left: $remaining'),
                                 ],
-                              ),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-                                TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (ctx) => const ContactAdminScreen())), child: const Text('Contact Admin')),
+                                const SizedBox(height: 8),
+                                if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
+                                  Text('Reason: ${user.suspensionReason}'),
+                                const SizedBox(height: 12),
+                                const Text('If you believe this is a mistake, contact admin.'),
                               ],
                             ),
-                          );
-                          return;
-                        }
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+                              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (ctx) => ContactAdminScreen(currentUser: user))), child: const Text('Contact Admin')),
+                            ],
+                          ),
+                        );
+                        return;
+                      }
+
+                      final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
+                      if (user.password == hashedPassword) {
                         if (_keepLoggedIn) {
                           await _authService.login(user.id!);
+                        }
+                        if (user.mustChangePassword) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (c) => ChangePasswordScreen(user: user)),
+                          );
+                          return;
                         }
                         // Navigate to the correct home screen based on user type
                         if (user.userType == UserType.farmer) {
@@ -133,17 +159,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           );
                         } else if (user.userType == UserType.admin) {
-                          if (user.mustChangePassword) {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (c) => ChangePasswordScreen(user: user)),
-                            );
-                          } else {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (c) => AdminHomeScreen(admin: user)),
-                            );
-                          }
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (c) => AdminHomeScreen(admin: user)),
+                          );
                         } else {
                           Navigator.pushReplacement(
                             context,

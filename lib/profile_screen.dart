@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:kaawa_mobile/widgets/app_avatar.dart';
 import 'package:kaawa_mobile/activity_log_screen.dart';
+import 'package:kaawa_mobile/contact_admin_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final User currentUser;
@@ -243,6 +244,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                             );
                           }),
+                    ),
+
+                  if (_isOwnProfile && widget.profileOwner.userType != UserType.admin)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.support_agent),
+                        label: const Text('Message Admin'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ContactAdminScreen(currentUser: widget.currentUser),
+                            ),
+                          );
+                        },
+                      ),
                     ),
 
                   if (!_isOwnProfile)

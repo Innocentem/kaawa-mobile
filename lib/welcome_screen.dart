@@ -13,6 +13,7 @@ import 'package:kaawa_mobile/forgot_password_screen.dart';
 import 'package:kaawa_mobile/contact_admin_screen.dart';
 import 'package:kaawa_mobile/admin_registration_screen.dart';
 import 'package:kaawa_mobile/admin_home_screen.dart';
+import 'package:kaawa_mobile/change_password_screen.dart';
 
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
@@ -38,7 +39,8 @@ class _InitialScreenState extends State<InitialScreen> {
         final user = await DatabaseHelper.instance.getUserById(userId);
         if (user != null) {
           // Block auto-login when user is suspended
-          if (user.suspendedUntil != null && user.suspendedUntil!.isAfter(DateTime.now())) {
+          if (user.isSuspended) {
+            final remaining = user.suspensionRemainingText;
             // clear stored login and inform user
             await _authService.logout();
             // show suspension dialog on the next frame so context is ready
@@ -52,6 +54,10 @@ class _InitialScreenState extends State<InitialScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
+                      if (remaining != null) ...[
+                        const SizedBox(height: 6),
+                        Text('Time left: $remaining'),
+                      ],
                       const SizedBox(height: 8),
                       if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
                         Text('Reason: ${user.suspensionReason}'),
@@ -70,12 +76,22 @@ class _InitialScreenState extends State<InitialScreen> {
             return; // do not navigate into the app
           }
 
-          if (user.userType == UserType.farmer.toString()) {
+          // Check if the user needs to change their password
+          if (user.mustChangePassword) {
+            // Navigate to the change password screen
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => ChangePasswordScreen(user: user)),
+            );
+            return;
+          }
+
+          if (user.userType == UserType.farmer) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => FarmerHomeScreen(farmer: user)),
             );
-          } else if (user.userType == UserType.admin.toString()) {
+          } else if (user.userType == UserType.admin) {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (context) => AdminHomeScreen(admin: user)),

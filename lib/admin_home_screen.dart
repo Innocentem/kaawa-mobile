@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:kaawa_mobile/data/user_data.dart';
 import 'package:kaawa_mobile/admin_user_list_screen.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa_mobile/admin_password_resets_screen.dart';
+import 'package:kaawa_mobile/conversations_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   final User admin;
@@ -51,8 +53,20 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
             ElevatedButton.icon(
               icon: const Icon(Icons.lock_reset),
               label: Text('Pending Password Resets ($_pendingResets)'),
+              onPressed: () async {
+                await Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminPasswordResetsScreen()));
+                await _loadPending();
+              },
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.message),
+              label: const Text('Messages'),
               onPressed: () {
-                // navigate to a pending resets screen or reload list
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
+                );
               },
             ),
           ],

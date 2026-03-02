@@ -23,7 +23,7 @@ class BuyerHomeScreen extends StatefulWidget {
   State<BuyerHomeScreen> createState() => _BuyerHomeScreenState();
 }
 
-class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderStateMixin {
+class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
   late Future<List<CoffeeStock>> _coffeeStockFuture;
   List<CoffeeStock> _allCoffeeStock = [];
   List<CoffeeStock> _filteredCoffeeStock = [];
@@ -38,6 +38,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkSuspensionAndLogout();
     _coffeeStockFuture = _getCoffeeStock();
     _searchController.addListener(_filterCoffeeStock);
     _getUnreadMessageCount();
@@ -55,8 +57,57 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _animationController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkSuspensionAndLogout();
+    }
+  }
+
+  Future<void> _checkSuspensionAndLogout() async {
+    final current = await DatabaseHelper.instance.getUserById(widget.buyer.id!);
+    if (current == null || !current.isSuspended) return;
+    await _authService.logout();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final remaining = current.suspensionRemainingText;
+      await showDialog<void>(
+        context: context,
+        builder: (c) => AlertDialog(
+          title: const Text('Account suspended'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your account is suspended until ${current.suspendedUntil!.toLocal()}.'),
+              if (remaining != null) ...[
+                const SizedBox(height: 6),
+                Text('Time left: $remaining'),
+              ],
+              const SizedBox(height: 8),
+              if (current.suspensionReason != null && current.suspensionReason!.isNotEmpty)
+                Text('Reason: ${current.suspensionReason}'),
+              const SizedBox(height: 12),
+              const Text('If you believe this is a mistake, contact admin.'),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+        (route) => false,
+      );
+    });
   }
 
   Future<void> _getUnreadMessageCount() async {

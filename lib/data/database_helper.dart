@@ -295,6 +295,22 @@ class DatabaseHelper {
     return maps.map((map) => User.fromMap(map)).toList();
   }
 
+  Future<List<User>> getAdmins() async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'users',
+      where: 'userType = ?',
+      whereArgs: [UserType.admin.toString()],
+      orderBy: 'fullName COLLATE NOCASE',
+    );
+    return maps.map((map) => User.fromMap(map)).toList();
+  }
+
+  Future<User?> getFirstAdmin() async {
+    final admins = await getAdmins();
+    return admins.isEmpty ? null : admins.first;
+  }
+
   /// Returns a summary of user activity: listingsCount (if farmer), interestsCount (as buyer),
   /// conversationsCount (distinct other users messaged) and earliest activity ISO timestamp (nullable).
   Future<Map<String, dynamic>> getUserActivitySummary(int userId) async {
@@ -659,23 +675,54 @@ class DatabaseHelper {
   /// Helper to let admin set a user's password by phone number. Returns true if a user was updated.
   Future<bool> adminSetUserPasswordByPhone(String phoneNumber, String newPasswordHash) async {
     final db = await instance.database;
-    final res = await db.update('users', {'password': newPasswordHash}, where: 'phoneNumber = ?', whereArgs: [phoneNumber]);
+    final res = await db.update(
+      'users',
+      {'password': newPasswordHash, 'mustChangePassword': 1},
+      where: 'phoneNumber = ?',
+      whereArgs: [phoneNumber],
+    );
     return res > 0;
+  }
+
+  /// Helper to let admin set a user's password by id and require change on next login.
+  Future<bool> adminSetUserPasswordById(int userId, String newPasswordHash) async {
+    final db = await instance.database;
+    final res = await db.update(
+      'users',
+      {'password': newPasswordHash, 'mustChangePassword': 1},
+      where: 'id = ?',
+      whereArgs: [userId],
+    );
+    return res > 0;
+  }
+
+  Future<void> _ensureUserSuspensionColumns(Database db) async {
+    final columns = await db.rawQuery("PRAGMA table_info('users')");
+    final names = columns.map((c) => c['name']?.toString()).toSet();
+    if (!names.contains('suspendedUntil')) {
+      await db.execute('ALTER TABLE users ADD COLUMN suspendedUntil TEXT');
+    }
+    if (!names.contains('suspensionReason')) {
+      await db.execute('ALTER TABLE users ADD COLUMN suspensionReason TEXT');
+    }
   }
 
   // Admin helpers: suspend/unsuspend users
   Future<void> suspendUser(int userId, DateTime until) async {
     final db = await instance.database;
+    await _ensureUserSuspensionColumns(db);
     await db.update('users', {'suspendedUntil': until.toIso8601String()}, where: 'id = ?', whereArgs: [userId]);
   }
 
   Future<void> unsuspendUser(int userId) async {
     final db = await instance.database;
+    await _ensureUserSuspensionColumns(db);
     await db.update('users', {'suspendedUntil': null, 'suspensionReason': null}, where: 'id = ?', whereArgs: [userId]);
   }
 
   Future<void> suspendUserWithReason(int userId, DateTime until, String? reason) async {
     final db = await instance.database;
+    await _ensureUserSuspensionColumns(db);
     await db.update('users', {'suspendedUntil': until.toIso8601String(), 'suspensionReason': reason}, where: 'id = ?', whereArgs: [userId]);
   }
 

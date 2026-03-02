@@ -25,13 +25,36 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
   }
 
   Widget _statusBadge(User u) {
-    if (u.suspendedUntil != null && u.suspendedUntil!.isAfter(DateTime.now())) {
+    if (u.isSuspended) {
+      final remaining = u.suspensionRemainingText;
+      final untilText = u.suspendedUntil!.toLocal().toString().split('.').first;
+      final label = remaining == null ? 'Suspended until $untilText' : 'Suspended ($remaining)';
       return Chip(
-        label: Text('Suspended until ${u.suspendedUntil!.toLocal().toString().split('.').first}'),
+        label: Text(label),
         backgroundColor: Theme.of(context).colorScheme.errorContainer,
       );
     }
     return const SizedBox.shrink();
+  }
+
+  Widget _sectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    );
+  }
+
+  Widget _userTile(User u) {
+    return ListTile(
+      title: Text(u.fullName),
+      subtitle: Text('${u.phoneNumber} • ${u.userType.name}'),
+      trailing: _statusBadge(u),
+      onTap: () async {
+        final detail = AdminUserDetailScreen(user: u);
+        await Navigator.push(context, MaterialPageRoute(builder: (c) => detail));
+        await _refresh();
+      },
+    );
   }
 
   @override
@@ -43,23 +66,23 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
           final users = snap.data ?? [];
+          final suspended = users.where((u) => u.isSuspended).toList();
+          final active = users.where((u) => !u.isSuspended).toList();
           return RefreshIndicator(
             onRefresh: _refresh,
-            child: ListView.separated(
-              itemCount: users.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
-              itemBuilder: (context, i) {
-                final u = users[i];
-                return ListTile(
-                  title: Text(u.fullName),
-                  subtitle: Text('${u.phoneNumber} • ${u.userType.name}'),
-                  trailing: _statusBadge(u),
-                  onTap: () {
-                    final detail = AdminUserDetailScreen(user: u);
-                    Navigator.push(context, MaterialPageRoute(builder: (c) => detail));
-                  },
-                );
-              },
+            child: ListView(
+              children: [
+                if (suspended.isNotEmpty) _sectionHeader('Suspended users'),
+                ...suspended.map((u) => _userTile(u)),
+                if (suspended.isNotEmpty && active.isNotEmpty) const Divider(height: 1),
+                if (active.isNotEmpty) _sectionHeader('Active users'),
+                ...active.map((u) => _userTile(u)),
+                if (users.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(child: Text('No users found')),
+                  ),
+              ],
             ),
           );
         },

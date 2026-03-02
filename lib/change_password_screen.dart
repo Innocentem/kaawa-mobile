@@ -35,6 +35,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       longitude: widget.user.longitude,
       village: widget.user.village,
       mustChangePassword: false,
+      suspendedUntil: widget.user.suspendedUntil,
+      suspensionReason: widget.user.suspensionReason,
     );
 
     await DatabaseHelper.instance.updateUser(updated);

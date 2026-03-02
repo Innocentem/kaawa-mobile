@@ -45,7 +45,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final ok = await DatabaseHelper.instance.adminSetUserPasswordByPhone(phoneNumber, hashed);
     if (ok) {
       await DatabaseHelper.instance.markPasswordResetHandled(id, adminName: 'admin');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Password reset for $phoneNumber -> $newPassPlain')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Password reset for $phoneNumber -> $newPassPlain (user must change on next login)')));
       await _refresh();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not found')));
