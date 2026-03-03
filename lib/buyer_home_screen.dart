@@ -304,13 +304,17 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Available Coffee', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              'Tap on a listing to view farmer details. Use the message icon to inquire or the cart icon to buy.',
-              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.textTheme.bodySmall?.color?.withAlpha((0.75 * 255).round())),
+            Row(
+              children: [
+                Text('Available Coffee', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Tap a listing to view farmer details. Use message or cart to inquire/buy.',
+                  child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             TextField(
               controller: _searchController,
               decoration: const InputDecoration(

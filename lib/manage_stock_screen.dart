@@ -65,17 +65,29 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Your Coffee Stock'),
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+        actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+        title: const Text('Manage Stock'),
       ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              'Use the pencil icon to edit a listing, and the checkmark icon to mark it as sold.',
-              style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: Theme.of(context).textTheme.bodySmall?.color?.withAlpha((0.8 * 255).round())),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              children: [
+                Text('Your Listings', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Edit a listing or mark it sold. Tap group to see interested buyers.',
+                  child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                ),
+              ],
             ),
           ),
           Expanded(
@@ -89,7 +101,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                 } else {
                   final stockItems = snapshot.data ?? [];
                   return stockItems.isEmpty
-                      ? const Center(child: Text('You have no coffee stock yet.'))
+                      ? const Center(child: Text('No stock yet.'))
                       : ListView.builder(
                           itemCount: stockItems.length,
                           itemBuilder: (context, index) {
@@ -98,10 +110,17 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                               margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                               child: ListTile(
                                 leading: stock.coffeePicturePath != null
-                                    ? SizedBox(width: 40, height: 40, child: ClipRRect(borderRadius: BorderRadius.circular(4), child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover)))
+                                    ? SizedBox(
+                                        width: 44,
+                                        height: 44,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover),
+                                        ),
+                                      )
                                     : const Icon(Icons.image, size: 40),
-                                title: Text(stock.coffeeType),
-                                subtitle: Text('${stock.quantity} Kgs at UGX ${stock.pricePerKg}/Kg'),
+                                title: Text(stock.coffeeType, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                subtitle: Text('${stock.quantity} kg • UGX ${stock.pricePerKg}/kg', maxLines: 1, overflow: TextOverflow.ellipsis),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
@@ -110,42 +129,51 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                       future: DatabaseHelper.instance.getInterestCountForStock(stock.id!),
                                       builder: (context, snapshotCount) {
                                         final count = snapshotCount.data ?? 0;
-                                        return IconButton(
-                                          icon: Stack(
-                                            alignment: Alignment.center,
-                                            children: [
-                                              const Icon(Icons.group),
-                                              if (count > 0)
-                                                Positioned(
-                                                  right: -6,
-                                                  top: -6,
-                                                  child: Container(
-                                                    padding: const EdgeInsets.all(4),
-                                                    decoration: BoxDecoration(color: Theme.of(context).colorScheme.error, shape: BoxShape.circle),
-                                                    child: Text('$count', style: TextStyle(color: Theme.of(context).colorScheme.onError, fontSize: 10)),
+                                        return Tooltip(
+                                          message: 'Interested buyers',
+                                          child: IconButton(
+                                            icon: Stack(
+                                              alignment: Alignment.center,
+                                              children: [
+                                                const Icon(Icons.group),
+                                                if (count > 0)
+                                                  Positioned(
+                                                    right: -6,
+                                                    top: -6,
+                                                    child: Container(
+                                                      padding: const EdgeInsets.all(4),
+                                                      decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
+                                                      child: Text('$count', style: TextStyle(color: theme.colorScheme.onError, fontSize: 10)),
+                                                    ),
                                                   ),
+                                              ],
+                                            ),
+                                            onPressed: () {
+                                              // open the interested buyers screen for this stock
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
                                                 ),
-                                            ],
+                                              );
+                                            },
                                           ),
-                                          onPressed: () {
-                                            // open the interested buyers screen for this stock
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
-                                              ),
-                                            );
-                                          },
                                         );
                                       },
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.edit),
-                                      onPressed: () => _showStockDialog(stock: stock),
+                                    Tooltip(
+                                      message: 'Edit listing',
+                                      child: IconButton(
+                                        icon: const Icon(Icons.edit),
+                                        onPressed: () => _showStockDialog(stock: stock),
+                                      ),
                                     ),
-                                    IconButton(
-                                      icon: Icon(stock.isSold ? Icons.undo : Icons.check),
-                                      onPressed: () => _toggleSoldStatus(stock),
+                                    Tooltip(
+                                      message: stock.isSold ? 'Mark as available' : 'Mark as sold',
+                                      child: IconButton(
+                                        icon: Icon(stock.isSold ? Icons.undo : Icons.check),
+                                        onPressed: () => _toggleSoldStatus(stock),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -161,6 +189,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showStockDialog(),
+        tooltip: 'Add stock',
         child: const Icon(Icons.add),
       ),
     );

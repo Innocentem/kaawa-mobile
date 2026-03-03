@@ -4,6 +4,7 @@ import 'package:kaawa_mobile/admin_user_list_screen.dart';
 import 'package:kaawa_mobile/data/database_helper.dart';
 import 'package:kaawa_mobile/admin_password_resets_screen.dart';
 import 'package:kaawa_mobile/conversations_screen.dart';
+import 'package:kaawa_mobile/widgets/icon_action_tile.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   final User admin;
@@ -29,6 +30,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Dashboard')),
       body: Padding(
@@ -38,36 +41,44 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.admin_panel_settings, size: 42),
+                Icon(Icons.admin_panel_settings, size: 40, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
                 const SizedBox(width: 12),
-                Expanded(child: Text('Welcome, ${widget.admin.fullName}', style: Theme.of(context).textTheme.titleLarge)),
+                Expanded(child: Text('Hi, ${widget.admin.fullName}', style: theme.textTheme.titleLarge)),
               ],
             ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.people),
-              label: const Text('Manage Users'),
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminUserListScreen())),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.lock_reset),
-              label: Text('Pending Password Resets ($_pendingResets)'),
-              onPressed: () async {
-                await Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminPasswordResetsScreen()));
-                await _loadPending();
-              },
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.message),
-              label: const Text('Messages'),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
-                );
-              },
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                IconActionTile(
+                  icon: Icons.people,
+                  label: 'Users',
+                  tooltip: 'Manage users',
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminUserListScreen())),
+                ),
+                IconActionTile(
+                  icon: Icons.lock_reset,
+                  label: 'Resets',
+                  tooltip: 'Pending password resets',
+                  badgeText: '$_pendingResets',
+                  onTap: () async {
+                    await Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminPasswordResetsScreen()));
+                    await _loadPending();
+                  },
+                ),
+                IconActionTile(
+                  icon: Icons.message,
+                  label: 'Messages',
+                  tooltip: 'View conversations',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
+                    );
+                  },
+                ),
+              ],
             ),
           ],
         ),

@@ -40,6 +40,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   Map<int, List<User>> _interestedByStock = {};
   List<CoffeeStock> _farmerStocks = [];
   final AuthService _auth_service = AuthService();
+  Map<int, double> _buyerRatings = {};
+  Map<int, int> _buyerReviewCounts = {};
 
   @override
   void initState() {
@@ -137,7 +139,25 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   Future<List<User>> _getBuyers() async {
     final allUsers = await DatabaseHelper.instance.getAllUsers();
-    return allUsers.where((user) => user.userType == UserType.buyer).toList();
+    final buyers = allUsers.where((user) => user.userType == UserType.buyer).toList();
+    await _loadBuyerRatings(buyers);
+    return buyers;
+  }
+
+  Future<void> _loadBuyerRatings(List<User> buyers) async {
+    final ratings = <int, double>{};
+    final counts = <int, int>{};
+    for (final buyer in buyers) {
+      if (buyer.id == null) continue;
+      final summary = await DatabaseHelper.instance.getRatingSummaryForUser(buyer.id!);
+      ratings[buyer.id!] = (summary['avg'] as num?)?.toDouble() ?? 0.0;
+      counts[buyer.id!] = (summary['count'] as num?)?.toInt() ?? 0;
+    }
+    if (!mounted) return;
+    setState(() {
+      _buyerRatings = ratings;
+      _buyerReviewCounts = counts;
+    });
   }
 
   void _filterBuyers() {
@@ -146,10 +166,77 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
       _filteredBuyers = _allBuyers.where((buyer) {
         final nameLower = buyer.fullName.toLowerCase();
         final districtLower = buyer.district.toLowerCase();
-        return nameLower.contains(query) ||
-            districtLower.contains(query);
+        return nameLower.contains(query) || districtLower.contains(query);
       }).toList();
     });
+  }
+
+  Future<void> _ensureFarmerStocksLoaded() async {
+    if (_farmerStocks.isNotEmpty) return;
+    final stocks = await DatabaseHelper.instance.getCoffeeStock(widget.farmer.id!);
+    if (!mounted) return;
+    setState(() {
+      _farmerStocks = stocks;
+    });
+  }
+
+  Future<void> _shareListingToBuyer(User buyer) async {
+    await _ensureFarmerStocksLoaded();
+    if (_farmerStocks.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add a listing before sharing it.')));
+      return;
+    }
+
+    final selected = await showModalBottomSheet<CoffeeStock>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: _farmerStocks.map((stock) {
+              final label = '${stock.coffeeType} • ${stock.quantity} kg • UGX ${stock.pricePerKg}/kg';
+              return ListTile(
+                title: Text(stock.coffeeType),
+                subtitle: Text(label),
+                onTap: () => Navigator.pop(sheetContext, stock),
+              );
+            }).toList(),
+          ),
+        );
+      },
+    );
+
+    if (selected == null || !mounted) return;
+    final message = 'Hi ${buyer.fullName}, I have ${selected.coffeeType} available. Interested?';
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          currentUser: widget.farmer,
+          otherUser: buyer,
+          coffeeStock: selected,
+          initialMessage: message,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRatingRow(double rating, int count) {
+    final whole = rating.round().clamp(0, 5);
+    return Row(
+      children: [
+        ...List.generate(5, (i) {
+          return Icon(
+            i < whole ? Icons.star : Icons.star_border,
+            size: 14,
+            color: Colors.amber.shade700,
+          );
+        }),
+        const SizedBox(width: 4),
+        Text('($count)', style: Theme.of(context).textTheme.labelSmall),
+      ],
+    );
   }
 
   void _toggleSortByDistance() {
@@ -397,7 +484,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
             context,
@@ -406,8 +493,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             ),
           );
         },
-        label: const Text('Manage Stock'),
-        icon: const Icon(Icons.inventory),
+        tooltip: 'Manage stock',
+        child: const Icon(Icons.inventory),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -419,7 +506,16 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Interested Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Row(
+                    children: [
+                      Text('Interested Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: 'Tap a card to view interested buyers per stock.',
+                        child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   SizedBox(
                     height: cardHeight,
@@ -540,13 +636,17 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
               ),
 
             // Available buyers section
-            Text('Available Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(
-              'Tap on a buyer to view their profile. Use the star to mark as favorite, or the message icon to start a conversation.',
-              style: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic, color: theme.textTheme.bodySmall == null ? null : theme.textTheme.bodySmall!.color!.withAlpha((0.75 * 255).round())),
+            Row(
+              children: [
+                Text('Available Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Tap a buyer to view profile. Use star to favorite or message to chat.',
+                  child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                ),
+              ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             TextField(
               controller: _searchController,
               decoration: const InputDecoration(
@@ -625,19 +725,32 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                               const SizedBox(height: 4),
                                               Text('District: ${buyer.district}'),
                                               if (distance != null) Text('${distance.toStringAsFixed(1)} km away'),
+                                              const SizedBox(height: 6),
+                                              _buildRatingRow(
+                                                _buyerRatings[buyer.id] ?? 0.0,
+                                                _buyerReviewCounts[buyer.id] ?? 0,
+                                              ),
                                             ],
                                           ),
                                         ),
                                         const SizedBox(height: 8),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                                        Wrap(
+                                          alignment: WrapAlignment.spaceAround,
+                                          spacing: 6,
+                                          runSpacing: 4,
                                           children: [
                                             IconButton(
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? theme.colorScheme.secondary : theme.textTheme.bodySmall?.color),
+                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? theme.colorScheme.secondary : theme.textTheme.bodySmall?.color, size: 20),
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              visualDensity: VisualDensity.compact,
                                               onPressed: () => _toggleFavorite(buyer.id!),
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.message),
+                                              icon: const Icon(Icons.message, size: 20),
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              visualDensity: VisualDensity.compact,
                                               onPressed: () {
                                                 Navigator.push(
                                                   context,
@@ -648,7 +761,18 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                               },
                                             ),
                                             IconButton(
-                                              icon: const Icon(Icons.phone),
+                                              icon: const Icon(Icons.campaign, size: 20),
+                                              tooltip: 'Share a listing',
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              visualDensity: VisualDensity.compact,
+                                              onPressed: () => _shareListingToBuyer(buyer),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(Icons.phone, size: 20),
+                                              padding: EdgeInsets.zero,
+                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                              visualDensity: VisualDensity.compact,
                                               onPressed: () => _makePhoneCall(buyer.phoneNumber),
                                             ),
                                           ],

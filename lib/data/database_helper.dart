@@ -456,6 +456,24 @@ class DatabaseHelper {
     return maps.map((map) => Review.fromMap(map)).toList();
   }
 
+  /// Returns average rating and review count for a user.
+  Future<Map<String, dynamic>> getRatingSummaryForUser(int reviewedUserId) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT AVG(rating) as avgRating, COUNT(*) as c FROM reviews WHERE reviewedUserId = ?',
+      [reviewedUserId],
+    );
+    if (rows.isEmpty) {
+      return {'avg': 0.0, 'count': 0};
+    }
+    final row = rows.first;
+    final avgRaw = row['avgRating'];
+    final countRaw = row['c'];
+    final avg = avgRaw is num ? avgRaw.toDouble() : double.tryParse(avgRaw?.toString() ?? '') ?? 0.0;
+    final count = countRaw is num ? countRaw.toInt() : int.tryParse(countRaw?.toString() ?? '') ?? 0;
+    return {'avg': avg, 'count': count};
+  }
+
   Future<void> addFavorite(int userId, int favoriteUserId) async {
     final db = await instance.database;
     await db.insert('favorites', {'userId': userId, 'favoriteUserId': favoriteUserId});
