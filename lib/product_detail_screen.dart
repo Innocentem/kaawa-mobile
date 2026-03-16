@@ -6,6 +6,8 @@ import 'package:kaawa/data/user_data.dart';
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/data/database_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:kaawa/write_review_screen.dart';
+import 'package:kaawa/profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final CoffeeStock stock;
@@ -22,12 +24,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int photoIndex = 0;
   late final List<String?> photos;
   int _interestedCount = 0;
+  bool _reviewStatusLoaded = false;
+  bool _alreadyReviewed = false;
 
   @override
   void initState() {
     super.initState();
     photos = _parseImages(widget.stock.coffeePicturePath);
     _loadInterestedCount();
+    _loadReviewStatus();
   }
 
   List<String?> _parseImages(String? pathField) {
@@ -44,6 +49,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _interestedCount = c;
       });
     }
+  }
+
+  Future<void> _loadReviewStatus() async {
+    final currentUser = widget.currentUser;
+    final farmer = widget.farmer;
+    if (currentUser == null || farmer == null) return;
+    if (currentUser.id == farmer.id) return;
+    if (currentUser.userType == UserType.admin || farmer.userType == UserType.admin) return;
+    final exists = await DatabaseHelper.instance.hasReviewByUser(currentUser.id!, farmer.id!);
+    if (!mounted) return;
+    setState(() {
+      _alreadyReviewed = exists;
+      _reviewStatusLoaded = true;
+    });
   }
 
   Future<void> _launchPhone(String? phone) async {
@@ -109,7 +128,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Row(
                     children: [
-                      AppAvatar(filePath: widget.farmer?.profilePicturePath, imageUrl: widget.farmer?.profilePicturePath, size: 56),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(28),
+                        onTap: widget.farmer == null || widget.currentUser == null
+                            ? null
+                            : () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ProfileScreen(
+                                      currentUser: widget.currentUser!,
+                                      profileOwner: widget.farmer!,
+                                    ),
+                                  ),
+                                );
+                              },
+                        child: AppAvatar(
+                          filePath: widget.farmer?.profilePicturePath,
+                          imageUrl: widget.farmer?.profilePicturePath,
+                          size: 56,
+                        ),
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
@@ -151,6 +190,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Text(widget.stock.description),
                 ),
+                if (widget.currentUser != null && widget.farmer != null && widget.currentUser!.id != widget.farmer!.id && widget.currentUser!.userType != UserType.admin && widget.farmer!.userType != UserType.admin)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: ElevatedButton(
+                      onPressed: !_reviewStatusLoaded || _alreadyReviewed
+                          ? null
+                          : () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => WriteReviewScreen(
+                                    reviewer: widget.currentUser!,
+                                    reviewedUser: widget.farmer!,
+                                  ),
+                                ),
+                              );
+                              await _loadReviewStatus();
+                            },
+                      child: Text(_alreadyReviewed ? 'Review already submitted' : 'Write a Review'),
+                    ),
+                  ),
               ],
             ),
           ),

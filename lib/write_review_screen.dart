@@ -17,8 +17,27 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   final _formKey = GlobalKey<FormState>();
   final _reviewController = TextEditingController();
   double _rating = 3.0;
+  bool _alreadyReviewed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReviewStatus();
+  }
+
+  Future<void> _loadReviewStatus() async {
+    final exists = await DatabaseHelper.instance.hasReviewByUser(widget.reviewer.id!, widget.reviewedUser.id!);
+    if (!mounted) return;
+    setState(() => _alreadyReviewed = exists);
+  }
 
   Future<void> _submitReview() async {
+    if (_alreadyReviewed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You already reviewed this user.')),
+      );
+      return;
+    }
     if (_formKey.currentState!.validate()) {
       final newReview = Review(
         reviewerId: widget.reviewer.id!,
@@ -27,7 +46,15 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
         reviewText: _reviewController.text,
       );
 
-      await DatabaseHelper.instance.insertReview(newReview);
+      final insertedId = await DatabaseHelper.instance.insertReview(newReview);
+      if (insertedId < 0) {
+        if (!mounted) return;
+        setState(() => _alreadyReviewed = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('You already reviewed this user.')),
+        );
+        return;
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Review submitted successfully!')),
@@ -50,6 +77,10 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
           child: ListView(
             children: <Widget>[
               const Text('Rating', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              if (_alreadyReviewed) ...[
+                const SizedBox(height: 6),
+                Text('You already reviewed this user.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
+              ],
               const SizedBox(height: 8),
               Row(
                 children: List.generate(5, (index) {
@@ -83,7 +114,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _submitReview,
+                onPressed: _alreadyReviewed ? null : _submitReview,
                 child: const Text('Submit Review'),
               ),
             ],

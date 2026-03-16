@@ -414,7 +414,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
           IconButton(
             icon: Icon(
               Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-              color: IconTheme.of(context).color ?? theme.colorScheme.onSurface,
+              color: theme.colorScheme.onPrimary,
             ),
             onPressed: () {
               Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();

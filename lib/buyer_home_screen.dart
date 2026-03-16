@@ -30,6 +30,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   List<CoffeeStock> _filteredCoffeeStock = [];
   Set<int> _interestedStockIds = {};
   final Map<int, int> _interestCounts = {};
+  final Map<int, User> _farmerCache = {};
   final _searchController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -132,11 +133,15 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     final stocks = await DatabaseHelper.instance.getAllCoffeeStock();
     // preload interest data for the current buyer
     _interestedStockIds = (await DatabaseHelper.instance.getInterestedStockIdsForBuyer(widget.buyer.id!)).toSet();
-    // preload counts
+    // preload counts + farmer cache
     for (final s in stocks) {
       if (s.id != null) {
         final c = await DatabaseHelper.instance.getInterestCountForStock(s.id!);
         _interestCounts[s.id!] = c;
+      }
+      final farmer = await DatabaseHelper.instance.getUserById(s.farmerId);
+      if (farmer != null) {
+        _farmerCache[s.farmerId] = farmer;
       }
     }
     return stocks;
@@ -268,7 +273,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
           IconButton(
             icon: Icon(
               Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-              color: IconTheme.of(context).color ?? theme.colorScheme.onSurface,
+              color: theme.colorScheme.onPrimary,
             ),
             onPressed: () {
               Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
@@ -441,18 +446,49 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                             aspectRatio: 1,
                                             child: ClipRRect(
                                               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                              child: GestureDetector(
-                                                onTap: () async {
-                                                  // fetch farmer and open product detail (pass current buyer as currentUser)
-                                                  final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
+                                              child: Stack(
+                                                children: [
+                                                  Positioned.fill(
+                                                    child: GestureDetector(
+                                                      onTap: () async {
+                                                        // fetch farmer and open product detail (pass current buyer as currentUser)
+                                                        final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                        Navigator.push(
+                                                          context,
+                                                          MaterialPageRoute(
+                                                            builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
+                                                          ),
+                                                        );
+                                                      },
+                                                      child: ListingCarousel(images: images, fit: BoxFit.cover),
                                                     ),
-                                                  );
-                                                },
-                                                child: ListingCarousel(images: images, fit: BoxFit.cover),
+                                                  ),
+                                                  Positioned(
+                                                    left: 8,
+                                                    bottom: 8,
+                                                    child: Material(
+                                                      color: Colors.transparent,
+                                                      child: InkWell(
+                                                        borderRadius: BorderRadius.circular(18),
+                                                        onTap: () {
+                                                          final farmer = _farmerCache[stock.farmerId];
+                                                          if (farmer == null) return;
+                                                          Navigator.push(
+                                                            context,
+                                                            MaterialPageRoute(
+                                                              builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer),
+                                                            ),
+                                                          );
+                                                        },
+                                                        child: AppAvatar(
+                                                          filePath: _farmerCache[stock.farmerId]?.profilePicturePath,
+                                                          imageUrl: _farmerCache[stock.farmerId]?.profilePicturePath,
+                                                          size: 36,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
                                           ),

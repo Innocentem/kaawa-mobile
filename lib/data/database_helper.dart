@@ -22,8 +22,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 26: add review_notifications table
-    return await openDatabase(path, version: 26, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 27: add unique reviewer/reviewed index
+    return await openDatabase(path, version: 27, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -88,6 +88,7 @@ class DatabaseHelper {
         reviewText TEXT NOT NULL
       )
     ''');
+    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reviews_unique_reviewer_reviewed ON reviews(reviewerId, reviewedUserId)');
   }
 
   Future<void> _createReviewNotificationsTable(Database db) async {
@@ -211,6 +212,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 26) {
       await _createReviewNotificationsTable(db);
+    }
+    if (oldVersion < 27) {
+      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reviews_unique_reviewer_reviewed ON reviews(reviewerId, reviewedUserId)');
     }
   }
 
@@ -468,6 +472,10 @@ class DatabaseHelper {
 
   Future<int> insertReview(Review review) async {
     final db = await instance.database;
+    final alreadyReviewed = await hasReviewByUser(review.reviewerId, review.reviewedUserId);
+    if (alreadyReviewed) {
+      return -1;
+    }
     final reviewId = await db.insert('reviews', review.toMap());
     await db.insert('review_notifications', {
       'reviewedUserId': review.reviewedUserId,
@@ -477,6 +485,18 @@ class DatabaseHelper {
       'isRead': 0,
     });
     return reviewId;
+  }
+
+  Future<bool> hasReviewByUser(int reviewerId, int reviewedUserId) async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'reviews',
+      columns: ['id'],
+      where: 'reviewerId = ? AND reviewedUserId = ?',
+      whereArgs: [reviewerId, reviewedUserId],
+      limit: 1,
+    );
+    return rows.isNotEmpty;
   }
 
   /// Returns average rating and review count for a user.

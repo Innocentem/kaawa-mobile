@@ -26,6 +26,8 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isEditing = false;
+  bool _hasReviewed = false;
+  bool _reviewStatusLoaded = false;
 
   late User _profileOwner;
   late TextEditingController _fullNameController;
@@ -41,6 +43,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     _profileOwner = widget.profileOwner;
     _initializeControllers(_profileOwner);
+    _loadReviewStatus();
+  }
+
+  Future<void> _loadReviewStatus() async {
+    if (_isOwnProfile || _profileOwner.userType == UserType.admin) return;
+    final exists = await DatabaseHelper.instance.hasReviewByUser(widget.currentUser.id!, _profileOwner.id!);
+    if (!mounted) return;
+    setState(() {
+      _hasReviewed = exists;
+      _reviewStatusLoaded = true;
+    });
   }
 
   void _initializeControllers(User user) {
@@ -282,18 +295,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   if (!_isOwnProfile && _profileOwner.userType != UserType.admin)
                     ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => WriteReviewScreen(
-                              reviewer: widget.currentUser,
-                              reviewedUser: _profileOwner,
-                            ),
-                          ),
-                        );
-                      },
-                      child: const Text('Write a Review'),
+                      onPressed: !_reviewStatusLoaded || _hasReviewed
+                          ? null
+                          : () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => WriteReviewScreen(
+                                    reviewer: widget.currentUser,
+                                    reviewedUser: _profileOwner,
+                                  ),
+                                ),
+                              );
+                              await _loadReviewStatus();
+                            },
+                      child: Text(_hasReviewed ? 'Review already submitted' : 'Write a Review'),
                     ),
 
                   const SizedBox(height: 12),

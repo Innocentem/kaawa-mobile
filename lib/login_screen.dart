@@ -22,7 +22,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneNumberController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _keepLoggedIn = false;
   bool _showResetBanner = false;
   final AuthService _authService = AuthService();
 
@@ -69,19 +68,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   }
                   return null;
                 },
-              ),
-              Row(
-                children: [
-                  Checkbox(
-                    value: _keepLoggedIn,
-                    onChanged: (value) {
-                      setState(() {
-                        _keepLoggedIn = value!;
-                      });
-                    },
-                  ),
-                  const Text('Keep me logged in'),
-                ],
               ),
               const SizedBox(height: 16),
               Row(
@@ -140,9 +126,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
                       if (user.password == hashedPassword) {
-                        if (_keepLoggedIn) {
-                          await _authService.login(user.id!);
-                        }
+                        await _authService.login(user.id!);
                         if (user.mustChangePassword) {
                           Navigator.pushReplacement(
                             context,
