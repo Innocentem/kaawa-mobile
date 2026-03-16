@@ -50,16 +50,23 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
           child: ListView(
             children: <Widget>[
               const Text('Rating', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              Slider(
-                value: _rating,
-                onChanged: (newRating) {
-                  setState(() => _rating = newRating);
-                },
-                min: 1,
-                max: 5,
-                divisions: 4,
-                label: _rating.toString(),
+              const SizedBox(height: 8),
+              Row(
+                children: List.generate(5, (index) {
+                  final value = index + 1;
+                  final isSelected = _rating >= value;
+                  return IconButton(
+                    tooltip: '$value star${value == 1 ? '' : 's'}',
+                    onPressed: () => setState(() => _rating = value.toDouble()),
+                    icon: Icon(
+                      isSelected ? Icons.star : Icons.star_border,
+                      color: isSelected ? Colors.amber.shade700 : Theme.of(context).disabledColor,
+                    ),
+                  );
+                }),
               ),
+              Text('$_rating / 5', style: Theme.of(context).textTheme.bodySmall),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _reviewController,
                 decoration: const InputDecoration(

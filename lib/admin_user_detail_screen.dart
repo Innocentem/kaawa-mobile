@@ -7,6 +7,8 @@ import 'admin/admin_conversations_list_screen.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/view_reviews_screen.dart';
+import 'package:kaawa/profile_screen.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
   final User user;
@@ -238,6 +240,29 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                 Navigator.push(context, MaterialPageRoute(builder: (c) => listingsScreen));
               },
               child: const Text('View Listings'),
+            ),
+            const SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ViewReviewsScreen(
+                      reviewedUser: _user,
+                      currentUser: widget.admin,
+                      onOpenProfile: (reviewer) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfileScreen(currentUser: widget.admin, profileOwner: reviewer),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+              child: const Text('View Reviews'),
             ),
           ],
         ),

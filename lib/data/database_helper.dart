@@ -22,8 +22,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 24: add mustChangePassword flag to users
-    return await openDatabase(path, version: 25, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 26: add review_notifications table
+    return await openDatabase(path, version: 26, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -47,6 +47,7 @@ class DatabaseHelper {
     ''');
     await _createMessagesTable(db);
     await _createReviewsTable(db);
+    await _createReviewNotificationsTable(db);
     await _createFavoritesTable(db);
     await _createCoffeeStockTable(db);
     await _createInterestedBuyersTable(db);
@@ -85,6 +86,19 @@ class DatabaseHelper {
         reviewedUserId INTEGER NOT NULL,
         rating REAL NOT NULL,
         reviewText TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _createReviewNotificationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE review_notifications(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reviewedUserId INTEGER NOT NULL,
+        reviewerId INTEGER NOT NULL,
+        reviewId INTEGER NOT NULL,
+        createdAt TEXT NOT NULL,
+        isRead INTEGER NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -194,6 +208,9 @@ class DatabaseHelper {
       } catch (e) {
         // ignore if column exists
       }
+    }
+    if (oldVersion < 26) {
+      await _createReviewNotificationsTable(db);
     }
   }
 
@@ -451,17 +468,15 @@ class DatabaseHelper {
 
   Future<int> insertReview(Review review) async {
     final db = await instance.database;
-    return await db.insert('reviews', review.toMap());
-  }
-
-  Future<List<Review>> getReviews(int reviewedUserId) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'reviews',
-      where: 'reviewedUserId = ?',
-      whereArgs: [reviewedUserId],
-    );
-    return maps.map((map) => Review.fromMap(map)).toList();
+    final reviewId = await db.insert('reviews', review.toMap());
+    await db.insert('review_notifications', {
+      'reviewedUserId': review.reviewedUserId,
+      'reviewerId': review.reviewerId,
+      'reviewId': reviewId,
+      'createdAt': DateTime.now().toIso8601String(),
+      'isRead': 0,
+    });
+    return reviewId;
   }
 
   /// Returns average rating and review count for a user.
@@ -480,6 +495,92 @@ class DatabaseHelper {
     final avg = avgRaw is num ? avgRaw.toDouble() : double.tryParse(avgRaw?.toString() ?? '') ?? 0.0;
     final count = countRaw is num ? countRaw.toInt() : int.tryParse(countRaw?.toString() ?? '') ?? 0;
     return {'avg': avg, 'count': count};
+  }
+
+  Future<int> getUnreadReviewNotificationCount(int reviewedUserId) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM review_notifications WHERE reviewedUserId = ? AND isRead = 0',
+      [reviewedUserId],
+    );
+    final countRaw = rows.isNotEmpty ? rows.first['c'] : 0;
+    return countRaw is num ? countRaw.toInt() : int.tryParse(countRaw?.toString() ?? '') ?? 0;
+  }
+
+  Future<List<Map<String, dynamic>>> getReviewNotifications(int reviewedUserId) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('''
+      SELECT
+        n.id as notification_id,
+        n.isRead as notification_isRead,
+        n.createdAt as notification_createdAt,
+        r.id as review_id,
+        r.reviewerId as reviewerId,
+        r.reviewedUserId as reviewedUserId,
+        r.rating as rating,
+        r.reviewText as reviewText,
+        u.id as reviewer_id,
+        u.fullName as reviewer_fullName,
+        u.phoneNumber as reviewer_phoneNumber,
+        u.district as reviewer_district,
+        u.password as reviewer_password,
+        u.userType as reviewer_userType,
+        u.profilePicturePath as reviewer_profilePicturePath,
+        u.latitude as reviewer_latitude,
+        u.longitude as reviewer_longitude,
+        u.village as reviewer_village
+      FROM review_notifications n
+      INNER JOIN reviews r ON n.reviewId = r.id
+      LEFT JOIN users u ON r.reviewerId = u.id
+      WHERE n.reviewedUserId = ?
+      ORDER BY n.createdAt DESC
+    ''', [reviewedUserId]);
+
+    final List<Map<String, dynamic>> result = [];
+    for (final row in rows) {
+      final notification = {
+        'id': row['notification_id'],
+        'isRead': row['notification_isRead'],
+        'createdAt': row['notification_createdAt'],
+      };
+      final review = {
+        'id': row['review_id'],
+        'reviewerId': row['reviewerId'],
+        'reviewedUserId': row['reviewedUserId'],
+        'rating': row['rating'],
+        'reviewText': row['reviewText'],
+      };
+
+      User? reviewer;
+      if (row['reviewer_id'] != null) {
+        reviewer = User(
+          id: row['reviewer_id'] as int?,
+          fullName: row['reviewer_fullName']?.toString() ?? '',
+          phoneNumber: row['reviewer_phoneNumber']?.toString() ?? '',
+          district: row['reviewer_district']?.toString() ?? '',
+          password: row['reviewer_password']?.toString() ?? '',
+          userType: (row['reviewer_userType'] != null && row['reviewer_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
+          profilePicturePath: row['reviewer_profilePicturePath']?.toString(),
+          latitude: row['reviewer_latitude'] is num ? (row['reviewer_latitude'] as num).toDouble() : null,
+          longitude: row['reviewer_longitude'] is num ? (row['reviewer_longitude'] as num).toDouble() : null,
+          village: row['reviewer_village']?.toString(),
+        );
+      }
+
+      result.add({'notification': notification, 'review': review, 'reviewer': reviewer});
+    }
+
+    return result;
+  }
+
+  Future<void> markAllReviewNotificationsRead(int reviewedUserId) async {
+    final db = await instance.database;
+    await db.update('review_notifications', {'isRead': 1}, where: 'reviewedUserId = ?', whereArgs: [reviewedUserId]);
+  }
+
+  Future<void> markReviewNotificationRead(int notificationId) async {
+    final db = await instance.database;
+    await db.update('review_notifications', {'isRead': 1}, where: 'id = ?', whereArgs: [notificationId]);
   }
 
   Future<void> addFavorite(int userId, int favoriteUserId) async {

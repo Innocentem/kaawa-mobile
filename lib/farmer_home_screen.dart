@@ -16,6 +16,7 @@ import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/interested_buyers_screen.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/review_notifications_screen.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
   final User farmer;
@@ -35,6 +36,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
+  int _unreadReviewCount = 0;
   int _totalInterestedCount = 0;
   Timer? _refreshTimer;
   Map<int, List<User>> _interestedByStock = {};
@@ -54,6 +56,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     _searchController.addListener(_filterBuyers);
     _loadFavorites();
     _getUnreadMessageCount();
+    _getUnreadReviewCount();
 
     _animationController = AnimationController(
       vsync: this,
@@ -137,6 +140,12 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     setState(() {
       _unreadMessageCount = count;
     });
+  }
+
+  Future<void> _getUnreadReviewCount() async {
+    final count = await DatabaseHelper.instance.getUnreadReviewNotificationCount(widget.farmer.id!);
+    if (!mounted) return;
+    setState(() => _unreadReviewCount = count);
   }
 
   Future<List<User>> _getBuyers() async {
@@ -445,6 +454,47 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                     ),
                     child: Text(
                       '$_unreadMessageCount',
+                      style: TextStyle(
+                        color: theme.colorScheme.onError,
+                        fontSize: 10,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.star_rate),
+                tooltip: 'Reviews',
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReviewNotificationsScreen(currentUser: _currentFarmer),
+                    ),
+                  );
+                  await _getUnreadReviewCount();
+                },
+              ),
+              if (_unreadReviewCount > 0)
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 16,
+                      minHeight: 16,
+                    ),
+                    child: Text(
+                      '$_unreadReviewCount',
                       style: TextStyle(
                         color: theme.colorScheme.onError,
                         fontSize: 10,

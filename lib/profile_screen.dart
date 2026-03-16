@@ -280,7 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
 
-                  if (!_isOwnProfile)
+                  if (!_isOwnProfile && _profileOwner.userType != UserType.admin)
                     ElevatedButton(
                       onPressed: () {
                         Navigator.push(
@@ -298,28 +298,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 12),
 
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ViewReviewsScreen(
-                            reviewedUser: _profileOwner,
-                            currentUser: widget.currentUser,
-                            onOpenProfile: (reviewer) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfileScreen(currentUser: widget.currentUser, profileOwner: reviewer),
-                                ),
-                              );
-                            },
+                  if (_profileOwner.userType != UserType.admin)
+                    ElevatedButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ViewReviewsScreen(
+                              reviewedUser: _profileOwner,
+                              currentUser: widget.currentUser,
+                              onOpenProfile: (reviewer) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ProfileScreen(currentUser: widget.currentUser, profileOwner: reviewer),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      );
-                    },
-                    child: const Text('View Reviews'),
-                  ),
+                        );
+                      },
+                      child: const Text('View Reviews'),
+                    ),
                 ],
               ),
             ),
