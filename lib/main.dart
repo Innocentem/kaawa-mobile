@@ -52,10 +52,11 @@ class MyApp extends StatelessWidget {
           })(),
           // use colorScheme for icon colors so widgets follow theme
           iconTheme: const IconThemeData(color: Color(0xFF471C09)),
-          scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+          scaffoldBackgroundColor: Colors.transparent,
+          canvasColor: Colors.transparent,
           // App bar uses scaffold bg and primary for icons
           appBarTheme: AppBarTheme(
-            backgroundColor: const Color(0xFFF5F5F5),
+            backgroundColor: Colors.transparent,
             foregroundColor: const Color(0xFF471C09),
             elevation: 0,
             iconTheme: const IconThemeData(color: Color(0xFF471C09)),
@@ -95,6 +96,15 @@ class MyApp extends StatelessWidget {
             labelStyle: const TextStyle(color: Color(0xFF471C09)),
           ),
           visualDensity: VisualDensity.adaptivePlatformDensity,
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: _FadePageTransitionsBuilder(),
+              TargetPlatform.iOS: _FadePageTransitionsBuilder(),
+              TargetPlatform.linux: _FadePageTransitionsBuilder(),
+              TargetPlatform.macOS: _FadePageTransitionsBuilder(),
+              TargetPlatform.windows: _FadePageTransitionsBuilder(),
+            },
+          ),
         ),
         darkTheme: ThemeData(
           colorScheme: const ColorScheme.dark(
@@ -151,27 +161,49 @@ class MyApp extends StatelessWidget {
             hintStyle: TextStyle(color: Colors.grey.shade500),
           ),
           visualDensity: VisualDensity.adaptivePlatformDensity,
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: _FadePageTransitionsBuilder(),
+              TargetPlatform.iOS: _FadePageTransitionsBuilder(),
+              TargetPlatform.linux: _FadePageTransitionsBuilder(),
+              TargetPlatform.macOS: _FadePageTransitionsBuilder(),
+              TargetPlatform.windows: _FadePageTransitionsBuilder(),
+            },
+          ),
         ),
         themeMode: theme.themeMode,
         home: const InitialScreen(),
         builder: (context, child) {
           final isDark = Theme.of(context).brightness == Brightness.dark;
-          if (!isDark || child == null) return child ?? const SizedBox.shrink();
+          if (child == null) return const SizedBox.shrink();
 
           return Stack(
             fit: StackFit.expand,
             children: [
               Image.asset(
-                'assets/images/bg.jpg',
+                isDark ? 'assets/images/bg.jpg' : 'assets/images/white.jpg',
                 fit: BoxFit.cover,
                 alignment: Alignment.center,
                 excludeFromSemantics: true,
               ),
+              if (!isDark)
+                Container(
+                  color: const Color(0xFFFFFFFF).withAlpha((0.08 * 255).round()),
+                ),
               child,
             ],
           );
         },
       ),
     );
+  }
+}
+
+class _FadePageTransitionsBuilder extends PageTransitionsBuilder {
+  const _FadePageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(PageRoute<T> route, BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation, Widget child) {
+    return FadeTransition(opacity: animation, child: child);
   }
 }

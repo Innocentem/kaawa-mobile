@@ -47,6 +47,7 @@ flutter:
     - assets/images/fallback.jpg
     - assets/images/seeds.jpg
     - assets/images/bg.jpg
+    - assets/images/white.jpg
     - assets/icons/kaawa_icon.png
   fonts:
     - family: Quicksand
