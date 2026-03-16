@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/widgets/listing_carousel.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/chat_screen.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/widgets/listing_carousel.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/data/database_helper.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final CoffeeStock stock;

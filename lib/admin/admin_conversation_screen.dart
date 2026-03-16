@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/message_data.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/message_data.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
 import '../../widgets/compact_loader.dart';
 
 class AdminConversationScreen extends StatefulWidget {

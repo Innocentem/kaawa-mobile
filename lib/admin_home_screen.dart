@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/admin_user_list_screen.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/admin_password_resets_screen.dart';
-import 'package:kaawa_mobile/conversations_screen.dart';
-import 'package:kaawa_mobile/widgets/icon_action_tile.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/admin_user_list_screen.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/admin_password_resets_screen.dart';
+import 'package:kaawa/conversations_screen.dart';
+import 'package:kaawa/widgets/icon_action_tile.dart';
+import 'package:kaawa/auth_service.dart';
+import 'package:kaawa/welcome_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   final User admin;
@@ -16,11 +18,14 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _pendingResets = 0;
+  int _unreadMessageCount = 0;
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
     _loadPending();
+    _loadUnreadMessages();
   }
 
   Future<void> _loadPending() async {
@@ -28,12 +33,35 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     setState(() => _pendingResets = rows.length);
   }
 
+  Future<void> _loadUnreadMessages() async {
+    final count = await DatabaseHelper.instance.getUnreadMessageCount(widget.admin.id!);
+    if (!mounted) return;
+    setState(() => _unreadMessageCount = count);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin Dashboard')),
+      appBar: AppBar(
+        title: const Text('Admin Dashboard'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: () async {
+              await _authService.logout();
+              if (!mounted) return;
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (c) => const WelcomeScreen()),
+                (route) => false,
+              );
+            },
+          ),
+        ],
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -55,7 +83,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   icon: Icons.people,
                   label: 'Users',
                   tooltip: 'Manage users',
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminUserListScreen())),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => AdminUserListScreen(admin: widget.admin))),
                 ),
                 IconActionTile(
                   icon: Icons.lock_reset,
@@ -71,11 +99,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   icon: Icons.message,
                   label: 'Messages',
                   tooltip: 'View conversations',
-                  onTap: () {
-                    Navigator.push(
+                  badgeText: '$_unreadMessageCount',
+                  onTap: () async {
+                    await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
                     );
+                    await _loadUnreadMessages();
                   },
                 ),
               ],

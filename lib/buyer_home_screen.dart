@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/auth_service.dart';
-import 'package:kaawa_mobile/chat_screen.dart';
-import 'package:kaawa_mobile/conversations_screen.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/welcome_screen.dart';
-import 'package:kaawa_mobile/profile_screen.dart';
-import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:kaawa/auth_service.dart';
+import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/conversations_screen.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/welcome_screen.dart';
+import 'package:kaawa/profile_screen.dart';
+import 'package:kaawa/theme/theme.dart';
 import 'package:provider/provider.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/widgets/listing_carousel.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/product_detail_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/widgets/listing_carousel.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/product_detail_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   final User buyer;
@@ -34,11 +34,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
   final AuthService _authService = AuthService();
+  late User _currentBuyer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _currentBuyer = widget.buyer;
     _checkSuspensionAndLogout();
     _coffeeStockFuture = _getCoffeeStock();
     _searchController.addListener(_filterCoffeeStock);
@@ -141,7 +143,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     });
   }
 
-
   Future<void> _logout() async {
     await _authService.logout();
     Navigator.pushAndRemoveUntil(
@@ -182,6 +183,24 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     }
   }
 
+  Future<void> _refreshCurrentBuyer() async {
+    final refreshed = await DatabaseHelper.instance.getUserById(widget.buyer.id!);
+    if (refreshed == null || !mounted) return;
+    setState(() {
+      _currentBuyer = refreshed;
+    });
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(currentUser: _currentBuyer, profileOwner: _currentBuyer),
+      ),
+    );
+    await _refreshCurrentBuyer();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -200,18 +219,21 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
             message: 'Open profile',
             child: InkWell(
               borderRadius: BorderRadius.circular(24),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: widget.buyer),
-                  ),
-                );
-              },
+              onTap: _openProfile,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Hero(tag: widget.buyer.id != null ? 'avatar-${widget.buyer.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: widget.buyer.profilePicturePath, imageUrl: widget.buyer.profilePicturePath, size: 40))),
+                  Hero(
+                    tag: _currentBuyer.id != null ? 'avatar-${_currentBuyer.id}' : UniqueKey(),
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: AppAvatar(
+                        filePath: _currentBuyer.profilePicturePath,
+                        imageUrl: _currentBuyer.profilePicturePath,
+                        size: 40,
+                      ),
+                    ),
+                  ),
                   if (_unreadMessageCount > 0)
                     Positioned(
                       right: -6,
@@ -284,14 +306,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
           ),
           IconButton(
             icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: widget.buyer),
-                ),
-              );
-            },
+            onPressed: _openProfile,
           ),
           IconButton(
             icon: const Icon(Icons.logout),

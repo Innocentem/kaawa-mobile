@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/message_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/message_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:intl/intl.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
 
 class ChatScreen extends StatefulWidget {
   final User currentUser;

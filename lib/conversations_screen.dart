@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/chat_screen.dart';
-import 'package:kaawa_mobile/data/conversation_data.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/data/conversation_data.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final User currentUser;
@@ -54,7 +54,14 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                       final coffeeStock = conversation.coffeeStock;
 
                       return ListTile(
-                        leading: Hero(tag: otherUser.id != null ? 'avatar-${otherUser.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: otherUser.profilePicturePath, imageUrl: otherUser.profilePicturePath, size: 40))),
+                        leading: Material(
+                          type: MaterialType.transparency,
+                          child: AppAvatar(
+                            filePath: otherUser.profilePicturePath,
+                            imageUrl: otherUser.profilePicturePath,
+                            size: 40,
+                          ),
+                        ),
                         title: Text(otherUser.fullName),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

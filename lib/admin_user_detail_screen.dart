@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
 import '../widgets/compact_loader.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
 import 'admin/admin_user_listings_screen.dart';
 import 'admin/admin_conversations_list_screen.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
+import 'package:kaawa/chat_screen.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
   final User user;
-  const AdminUserDetailScreen({super.key, required this.user});
+  final User admin;
+  const AdminUserDetailScreen({super.key, required this.user, required this.admin});
 
   @override
   State<AdminUserDetailScreen> createState() => _AdminUserDetailScreenState();
@@ -97,9 +99,10 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final u = _user;
+    final isSuspended = u.isSuspended;
     return Scaffold(
       appBar: AppBar(title: Text(u.fullName)),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +111,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
             Text('District: ${u.district}'),
             Text('Type: ${u.userType.name}'),
             const SizedBox(height: 12),
-            if (u.suspendedUntil != null && u.suspendedUntil!.isAfter(DateTime.now()))
+            if (isSuspended && u.suspendedUntil != null && u.suspendedUntil!.isAfter(DateTime.now()))
               Text('Suspended until: ${u.suspendedUntil!.toLocal()}'),
             const SizedBox(height: 12),
             // Responsive action buttons - use LayoutBuilder and make buttons full-width on narrow screens
@@ -131,54 +134,58 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    makeButton(
-                      icon: Icons.hourglass_bottom,
-                      label: 'Suspend 1 day',
-                      onPressed: () async {
-                        final until = DateTime.now().add(const Duration(days: 1));
-                        await _showSuspendDialog(until);
-                      },
-                    ),
-                    makeButton(
-                      icon: Icons.event,
-                      label: 'Suspend 7 days',
-                      onPressed: () async {
-                        final until = DateTime.now().add(const Duration(days: 7));
-                        await _showSuspendDialog(until);
-                      },
-                    ),
-                    makeButton(
-                      icon: Icons.schedule,
-                      label: 'Suspend (custom)',
-                      onPressed: () async {
-                        await _pickCustomSuspend();
-                      },
-                    ),
+                    if (!isSuspended)
+                      makeButton(
+                        icon: Icons.hourglass_bottom,
+                        label: 'Suspend 1 day',
+                        onPressed: () async {
+                          final until = DateTime.now().add(const Duration(days: 1));
+                          await _showSuspendDialog(until);
+                        },
+                      ),
+                    if (!isSuspended)
+                      makeButton(
+                        icon: Icons.event,
+                        label: 'Suspend 7 days',
+                        onPressed: () async {
+                          final until = DateTime.now().add(const Duration(days: 7));
+                          await _showSuspendDialog(until);
+                        },
+                      ),
+                    if (!isSuspended)
+                      makeButton(
+                        icon: Icons.schedule,
+                        label: 'Suspend (custom)',
+                        onPressed: () async {
+                          await _pickCustomSuspend();
+                        },
+                      ),
                     makeButton(
                       icon: Icons.lock_reset,
                       label: 'Reset password',
                       onPressed: _resetPassword,
                     ),
-                    makeButton(
-                      icon: Icons.remove_circle_outline,
-                      label: 'Unsuspend',
-                      onPressed: () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (c) => AlertDialog(
-                            title: const Text('Confirm unsuspend'),
-                            content: const Text('Are you sure you want to remove suspension for this user?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
-                              ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Unsuspend')),
-                            ],
-                          ),
-                        );
-                        if (ok == true) {
-                          await _unsuspend();
-                        }
-                      },
-                    ),
+                    if (isSuspended)
+                      makeButton(
+                        icon: Icons.remove_circle_outline,
+                        label: 'Unsuspend',
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (c) => AlertDialog(
+                              title: const Text('Confirm unsuspend'),
+                              content: const Text('Are you sure you want to remove suspension for this user?'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                                ElevatedButton(onPressed: () => Navigator.pop(c, true), child: const Text('Unsuspend')),
+                              ],
+                            ),
+                          );
+                          if (ok == true) {
+                            await _unsuspend();
+                          }
+                        },
+                      ),
                   ],
                 );
               },
@@ -202,6 +209,21 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
               },
             ),
             const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (c) => ChatScreen(
+                      currentUser: widget.admin,
+                      otherUser: _user,
+                    ),
+                  ),
+                );
+              },
+              child: const Text('Message User'),
+            ),
+            const SizedBox(height: 8),
             ElevatedButton(
               onPressed: () {
                 final convList = AdminConversationsListScreen(userId: widget.user.id!);

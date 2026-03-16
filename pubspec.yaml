@@ -1,4 +1,4 @@
-name: kaawa_mobile
+name: kaawa
 description: A new Flutter project for connecting coffee farmers and buyers.
 
 publish_to: 'none' 
@@ -33,13 +33,21 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.13.1
 
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/icons/kaawa_icon.png
+  min_sdk_android: 21
 flutter:
   uses-material-design: true
   assets:
     - assets/images/avatar.jpg
     - assets/images/fallback.jpg
     - assets/images/seeds.jpg
+    - assets/images/bg.jpg
+    - assets/icons/kaawa_icon.png
   fonts:
     - family: Quicksand
       fonts:

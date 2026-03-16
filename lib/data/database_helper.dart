@@ -1,10 +1,11 @@
-import 'package:sqflite/sqflite.dart';
+import 'package:flutter/material.dart';
 import 'package:path/path.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/message_data.dart';
-import 'package:kaawa_mobile/data/review_data.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/data/conversation_data.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/message_data.dart';
+import 'package:kaawa/data/review_data.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/conversation_data.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
@@ -326,7 +327,7 @@ class DatabaseHelper {
 
     // conversationsCount: distinct other user ids in messages
     final convResult = await db.rawQuery('''
-      SELECT COUNT(DISTINCT IIF(senderId = ?, receiverId, senderId)) as c
+      SELECT COUNT(DISTINCT CASE WHEN senderId = ? THEN receiverId ELSE senderId END) as c
       FROM messages
       WHERE senderId = ? OR receiverId = ?
     ''', [userId, userId, userId]);
@@ -414,12 +415,15 @@ class DatabaseHelper {
       FROM messages m
       INNER JOIN (
         SELECT
-          IIF(senderId = ?, receiverId, senderId) as otherUserId,
+          CASE WHEN senderId = ? THEN receiverId ELSE senderId END as otherUserId,
           MAX(timestamp) as maxTimestamp
         FROM messages
         WHERE senderId = ? OR receiverId = ?
         GROUP BY otherUserId
-      ) as last_message ON (IIF(m.senderId = ?, m.receiverId, m.senderId) = last_message.otherUserId AND m.timestamp = last_message.maxTimestamp)
+      ) as last_message ON (
+        CASE WHEN m.senderId = ? THEN m.receiverId ELSE m.senderId END = last_message.otherUserId
+        AND m.timestamp = last_message.maxTimestamp
+      )
       ORDER BY m.timestamp DESC
     ''', [userId, userId, userId, userId]);
 
@@ -428,12 +432,16 @@ class DatabaseHelper {
       final lastMessage = Message.fromMap(map);
       final otherUserId = lastMessage.senderId == userId ? lastMessage.receiverId : lastMessage.senderId;
       final otherUser = await getUserById(otherUserId);
+      if (otherUser == null) {
+        // Skip conversations that reference deleted/missing users.
+        continue;
+      }
       CoffeeStock? coffeeStock;
       if (lastMessage.coffeeStockId != null) {
         coffeeStock = await getCoffeeStockById(lastMessage.coffeeStockId!);
       }
       conversations.add(Conversation(
-        otherUser: otherUser!,
+        otherUser: otherUser,
         lastMessage: lastMessage,
         coffeeStock: coffeeStock,
       ));

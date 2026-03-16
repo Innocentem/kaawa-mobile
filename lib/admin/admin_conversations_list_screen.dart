@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/conversation_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/conversation_data.dart';
 import './admin_conversation_screen.dart' as acs;
 import '../widgets/compact_loader.dart';
 

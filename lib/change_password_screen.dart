@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
 import 'widgets/compact_loader.dart';
 
 class ChangePasswordScreen extends StatefulWidget {

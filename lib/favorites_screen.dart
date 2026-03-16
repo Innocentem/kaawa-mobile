@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/profile_screen.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/profile_screen.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
 
 class FavoritesScreen extends StatefulWidget {
   final User currentUser;

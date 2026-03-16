@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/chat_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/chat_screen.dart';
 
 class ContactAdminScreen extends StatelessWidget {
   final User? currentUser;

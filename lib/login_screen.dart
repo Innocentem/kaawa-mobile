@@ -1,15 +1,15 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/auth_service.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/farmer_home_screen.dart';
-import 'package:kaawa_mobile/buyer_home_screen.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/forgot_password_screen.dart';
-import 'package:kaawa_mobile/contact_admin_screen.dart';
-import 'package:kaawa_mobile/change_password_screen.dart';
-import 'package:kaawa_mobile/admin_home_screen.dart';
+import 'package:kaawa/auth_service.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/farmer_home_screen.dart';
+import 'package:kaawa/buyer_home_screen.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/forgot_password_screen.dart';
+import 'package:kaawa/contact_admin_screen.dart';
+import 'package:kaawa/change_password_screen.dart';
+import 'package:kaawa/admin_home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

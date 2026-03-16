@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa/data/database_helper.dart';
 import 'widgets/compact_loader.dart';
 
 class AdminScreen extends StatefulWidget {

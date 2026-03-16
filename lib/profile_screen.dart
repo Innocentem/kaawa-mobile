@@ -1,17 +1,17 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/manage_stock_screen.dart';
+import 'package:kaawa/write_review_screen.dart';
+import 'package:kaawa/view_reviews_screen.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/activity_log_screen.dart';
+import 'package:kaawa/contact_admin_screen.dart';
 import 'package:intl/intl.dart';
-import 'package:kaawa_mobile/manage_stock_screen.dart';
-import 'package:kaawa_mobile/write_review_screen.dart';
-import 'package:kaawa_mobile/view_reviews_screen.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/activity_log_screen.dart';
-import 'package:kaawa_mobile/contact_admin_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final User currentUser;
@@ -27,18 +27,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isEditing = false;
 
+  late User _profileOwner;
   late TextEditingController _fullNameController;
   late TextEditingController _phoneNumberController;
   late TextEditingController _districtController;
   late TextEditingController _villageController;
   String? _profilePicturePath;
 
-  bool get _isOwnProfile => widget.currentUser.id == widget.profileOwner.id;
+  bool get _isOwnProfile => widget.currentUser.id == _profileOwner.id;
 
   @override
   void initState() {
     super.initState();
-    _initializeControllers(widget.profileOwner);
+    _profileOwner = widget.profileOwner;
+    _initializeControllers(_profileOwner);
   }
 
   void _initializeControllers(User user) {
@@ -54,7 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() {
       _isEditing = !_isEditing;
       if (!_isEditing) {
-        _initializeControllers(widget.profileOwner);
+        _initializeControllers(_profileOwner);
       }
     });
   }
@@ -78,22 +80,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final updatedUser = User(
-      id: widget.profileOwner.id,
+      id: _profileOwner.id,
       fullName: _fullNameController.text,
       phoneNumber: _phoneNumberController.text,
-      password: widget.profileOwner.password, // Keep the existing password
+      password: _profileOwner.password, // Keep the existing password
       district: _districtController.text,
-      userType: widget.profileOwner.userType,
+      userType: _profileOwner.userType,
       profilePicturePath: _profilePicturePath,
-      latitude: widget.profileOwner.latitude,
-      longitude: widget.profileOwner.longitude,
+      latitude: _profileOwner.latitude,
+      longitude: _profileOwner.longitude,
       village: _villageController.text,
+      mustChangePassword: _profileOwner.mustChangePassword,
+      suspendedUntil: _profileOwner.suspendedUntil,
+      suspensionReason: _profileOwner.suspensionReason,
     );
 
     await DatabaseHelper.instance.updateUser(updatedUser);
+    final refreshed = await DatabaseHelper.instance.getUserById(updatedUser.id!);
 
     setState(() {
       _isEditing = false;
+      _profileOwner = refreshed ?? updatedUser;
+      _initializeControllers(_profileOwner);
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -104,7 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _openActivityLog() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ActivityLogScreen(userId: widget.profileOwner.id!)),
+      MaterialPageRoute(builder: (context) => ActivityLogScreen(userId: _profileOwner.id!)),
     );
   }
 
@@ -136,28 +144,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Column(
                     children: [
-                      Hero(
-                        tag: widget.profileOwner.id != null ? 'avatar-${widget.profileOwner.id}' : UniqueKey(),
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: AppAvatar(
-                            filePath: _profilePicturePath,
-                            imageUrl: _profilePicturePath,
-                            size: 72,
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Hero(
+                            tag: _profileOwner.id != null ? 'avatar-${_profileOwner.id}' : UniqueKey(),
+                            child: Material(
+                              type: MaterialType.transparency,
+                              child: AppAvatar(
+                                filePath: _profilePicturePath,
+                                imageUrl: _profilePicturePath,
+                                size: 72,
+                              ),
+                            ),
                           ),
-                        ),
+                          if (_isEditing)
+                            Positioned(
+                              right: -4,
+                              bottom: -4,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: IconButton(
+                                  icon: const Icon(Icons.camera_alt),
+                                  tooltip: 'Change profile photo',
+                                  onPressed: () => _pickImage(ImageSource.gallery),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        widget.profileOwner.fullName.isNotEmpty ? widget.profileOwner.fullName : 'No name',
+                        _profileOwner.fullName.isNotEmpty ? _profileOwner.fullName : 'No name',
                         style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       // Activity summary (listings / interests / conversations + member since)
                       // XP/badges removed per product decision. Use StreamBuilder to keep values live.
-                      if (widget.profileOwner.id != null)
+                      if (_profileOwner.id != null)
                         StreamBuilder<Map<String, dynamic>>(
-                          stream: DatabaseHelper.instance.getUserActivityStream(widget.profileOwner.id!),
+                          stream: DatabaseHelper.instance.getUserActivityStream(_profileOwner.id!),
                           builder: (context, snapshot) {
                             if (!snapshot.hasData) {
                               return Text('Loading activity...', style: theme.textTheme.bodySmall);
@@ -194,15 +220,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         )
                     ],
                   ),
-                  if (_isEditing)
-                    Positioned(
-                      bottom: 0,
-                      right: 100,
-                      child: IconButton(
-                        icon: const Icon(Icons.camera_alt),
-                        onPressed: () => _pickImage(ImageSource.gallery),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -224,13 +241,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildTextField(_fullNameController, 'Full Name', isEnabled: _isEditing),
                   _buildTextField(_phoneNumberController, 'Phone Number', isEnabled: _isEditing, keyboardType: TextInputType.phone),
                   _buildTextField(_districtController, 'District', isEnabled: _isEditing),
-                  if (widget.profileOwner.userType == UserType.farmer) ..._farmerFields,
+                  if (_profileOwner.userType == UserType.farmer) ..._farmerFields,
                   const SizedBox(height: 16),
 
                   if (_isOwnProfile && _isEditing)
                     ElevatedButton(onPressed: _saveChanges, child: const Text('Save Changes')),
 
-                  if (_isOwnProfile && widget.profileOwner.userType == UserType.farmer)
+                  if (_isOwnProfile && _profileOwner.userType == UserType.farmer)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: ElevatedButton.icon(
@@ -240,13 +257,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ManageStockScreen(farmer: widget.profileOwner),
+                                builder: (context) => ManageStockScreen(farmer: _profileOwner),
                               ),
                             );
                           }),
                     ),
 
-                  if (_isOwnProfile && widget.profileOwner.userType != UserType.admin)
+                  if (_isOwnProfile && _profileOwner.userType != UserType.admin)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: ElevatedButton.icon(
@@ -271,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           MaterialPageRoute(
                             builder: (context) => WriteReviewScreen(
                               reviewer: widget.currentUser,
-                              reviewedUser: widget.profileOwner,
+                              reviewedUser: _profileOwner,
                             ),
                           ),
                         );
@@ -287,7 +304,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) => ViewReviewsScreen(
-                            reviewedUser: widget.profileOwner,
+                            reviewedUser: _profileOwner,
                             currentUser: widget.currentUser,
                             onOpenProfile: (reviewer) {
                               Navigator.push(

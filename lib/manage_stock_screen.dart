@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/interested_buyers_screen.dart';
-import 'package:kaawa_mobile/widgets/listing_image.dart';
-import 'package:kaawa_mobile/widgets/listing_carousel.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/interested_buyers_screen.dart';
+import 'package:kaawa/widgets/listing_image.dart';
+import 'package:kaawa/widgets/listing_carousel.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -149,7 +149,6 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                               ],
                                             ),
                                             onPressed: () {
-                                              // open the interested buyers screen for this stock
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
@@ -297,66 +296,95 @@ class _StockDialogState extends State<_StockDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.stock == null ? 'Add Coffee Stock' : 'Edit Coffee Stock'),
-      content: Form(
-        key: _formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: _coffeeTypeController,
-              decoration: const InputDecoration(labelText: 'Coffee Type'),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter the coffee type';
-                }
-                return null;
-              },
-            ),
-            TextFormField(
-              controller: _quantityController,
-              decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter the quantity';
-                }
-                return null;
-              },
-            ),
-            TextFormField(
-              controller: _pricePerKgController,
-              decoration: const InputDecoration(labelText: 'Price per Kg (in UGX)'),
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter the price per Kg';
-                }
-                return null;
-              },
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _descriptionController,
-              decoration: const InputDecoration(labelText: 'Description'),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            _buildImagePicker(),
-          ],
+    final maxHeight = MediaQuery.of(context).size.height * 0.8;
+    final maxWidth = MediaQuery.of(context).size.width * 0.9;
+    return Dialog(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight, maxWidth: maxWidth),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.stock == null ? 'Add Coffee Stock' : 'Edit Coffee Stock',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          controller: _coffeeTypeController,
+                          decoration: const InputDecoration(labelText: 'Coffee Type'),
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter the coffee type';
+                            }
+                            return null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: _quantityController,
+                          decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter the quantity';
+                            }
+                            return null;
+                          },
+                        ),
+                        TextFormField(
+                          controller: _pricePerKgController,
+                          decoration: const InputDecoration(labelText: 'Price per Kg (in UGX)'),
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return 'Please enter the price per Kg';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        TextFormField(
+                          controller: _descriptionController,
+                          decoration: const InputDecoration(labelText: 'Description'),
+                          maxLines: 3,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildImagePicker(),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: _saveStock,
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: _saveStock,
-          child: const Text('Save'),
-        ),
-      ],
     );
   }
 

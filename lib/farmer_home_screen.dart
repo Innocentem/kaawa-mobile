@@ -1,21 +1,21 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:kaawa_mobile/auth_service.dart';
-import 'package:kaawa_mobile/chat_screen.dart';
-import 'package:kaawa_mobile/conversations_screen.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/welcome_screen.dart';
-import 'package:kaawa_mobile/manage_stock_screen.dart';
-import 'package:kaawa_mobile/profile_screen.dart';
-import 'package:kaawa_mobile/theme/theme.dart';
+import 'package:kaawa/auth_service.dart';
+import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/conversations_screen.dart';
+import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/welcome_screen.dart';
+import 'package:kaawa/manage_stock_screen.dart';
+import 'package:kaawa/profile_screen.dart';
+import 'package:kaawa/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kaawa_mobile/widgets/app_avatar.dart';
-import 'package:kaawa_mobile/widgets/compact_loader.dart';
-import 'package:kaawa_mobile/interested_buyers_screen.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/widgets/compact_loader.dart';
+import 'package:kaawa/interested_buyers_screen.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
   final User farmer;
@@ -42,11 +42,13 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   final AuthService _auth_service = AuthService();
   Map<int, double> _buyerRatings = {};
   Map<int, int> _buyerReviewCounts = {};
+  late User _currentFarmer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _currentFarmer = widget.farmer;
     _checkSuspensionAndLogout();
     _buyersFuture = _getBuyers();
     _searchController.addListener(_filterBuyers);
@@ -327,6 +329,24 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     }
   }
 
+  Future<void> _refreshCurrentFarmer() async {
+    final refreshed = await DatabaseHelper.instance.getUserById(widget.farmer.id!);
+    if (refreshed == null || !mounted) return;
+    setState(() {
+      _currentFarmer = refreshed;
+    });
+  }
+
+  Future<void> _openProfile() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(currentUser: _currentFarmer, profileOwner: _currentFarmer),
+      ),
+    );
+    await _refreshCurrentFarmer();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -351,18 +371,15 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             message: 'Open profile',
             child: InkWell(
               borderRadius: BorderRadius.circular(28),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: widget.farmer),
-                  ),
-                );
-              },
+              onTap: _openProfile,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  AppAvatar(filePath: widget.farmer.profilePicturePath, imageUrl: widget.farmer.profilePicturePath, size: 44),
+                  AppAvatar(
+                    filePath: _currentFarmer.profilePicturePath,
+                    imageUrl: _currentFarmer.profilePicturePath,
+                    size: 44,
+                  ),
                   if (_unreadMessageCount > 0)
                     Positioned(
                       right: -8,
@@ -440,14 +457,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
           ),
           IconButton(
             icon: const Icon(Icons.person),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: widget.farmer),
-                ),
-              );
-            },
+            onPressed: _openProfile,
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -475,7 +485,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
               await Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => ManageStockScreen(farmer: widget.farmer),
+                  builder: (context) => ManageStockScreen(farmer: _currentFarmer),
                 ),
               );
               // refresh count after returning
@@ -489,7 +499,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => ManageStockScreen(farmer: widget.farmer),
+              builder: (context) => ManageStockScreen(farmer: _currentFarmer),
             ),
           );
         },
@@ -573,16 +583,10 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                                               },
                                               child: Padding(
                                                 padding: const EdgeInsets.only(left: 8.0),
-                                                child: Hero(
-                                                  tag: buyers[0].id != null ? 'avatar-${buyers[0].id}' : UniqueKey(),
-                                                  child: Material(
-                                                    type: MaterialType.transparency,
-                                                    child: AppAvatar(
-                                                      filePath: buyers[0].profilePicturePath,
-                                                      imageUrl: buyers[0].profilePicturePath,
-                                                      size: avatarSize,
-                                                    ),
-                                                  ),
+                                                child: AppAvatar(
+                                                  filePath: buyers[0].profilePicturePath,
+                                                  imageUrl: buyers[0].profilePicturePath,
+                                                  size: avatarSize,
                                                 ),
                                               ),
                                             ),

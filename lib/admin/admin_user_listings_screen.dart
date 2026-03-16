@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/coffee_stock_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
 import '../../widgets/compact_loader.dart';
 
 class AdminUserListingsScreen extends StatefulWidget {

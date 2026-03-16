@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/theme/theme.dart';
-import 'package:kaawa_mobile/welcome_screen.dart';
+import 'package:kaawa/theme/theme.dart';
+import 'package:kaawa/welcome_screen.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -113,7 +113,7 @@ class MyApp extends StatelessWidget {
             headlineMedium: ThemeData.dark().textTheme.headlineMedium?.copyWith(fontSize: 22, fontWeight: FontWeight.w700),
             titleLarge: ThemeData.dark().textTheme.titleLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.w700),
           ),
-          scaffoldBackgroundColor: const Color(0xFF471C09),
+          scaffoldBackgroundColor: Colors.transparent,
           iconTheme: const IconThemeData(color: Color(0xFFFFD740)),
           cardColor: const Color(0xFF1E1E1E),
           elevatedButtonTheme: ElevatedButtonThemeData(
@@ -154,6 +154,23 @@ class MyApp extends StatelessWidget {
         ),
         themeMode: theme.themeMode,
         home: const InitialScreen(),
+        builder: (context, child) {
+          final isDark = Theme.of(context).brightness == Brightness.dark;
+          if (!isDark || child == null) return child ?? const SizedBox.shrink();
+
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/images/bg.jpg',
+                fit: BoxFit.cover,
+                alignment: Alignment.center,
+                excludeFromSemantics: true,
+              ),
+              child,
+            ],
+          );
+        },
       ),
     );
   }

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
-import 'package:kaawa_mobile/data/user_data.dart';
+import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart';
 import './admin_user_detail_screen.dart';
 import '../widgets/compact_loader.dart';
 
 class AdminUserListScreen extends StatefulWidget {
-  const AdminUserListScreen({super.key});
+  final User admin;
+  const AdminUserListScreen({super.key, required this.admin});
 
   @override
   State<AdminUserListScreen> createState() => _AdminUserListScreenState();
@@ -50,7 +51,7 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
       subtitle: Text('${u.phoneNumber} • ${u.userType.name}'),
       trailing: _statusBadge(u),
       onTap: () async {
-        final detail = AdminUserDetailScreen(user: u);
+        final detail = AdminUserDetailScreen(user: u, admin: widget.admin);
         await Navigator.push(context, MaterialPageRoute(builder: (c) => detail));
         await _refresh();
       },
@@ -65,7 +66,7 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
         future: _usersFuture,
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
-          final users = snap.data ?? [];
+          final users = (snap.data ?? []).where((u) => u.userType != UserType.admin).toList();
           final suspended = users.where((u) => u.isSuspended).toList();
           final active = users.where((u) => !u.isSuspended).toList();
           return RefreshIndicator(

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/widgets/listing_image.dart';
+import 'package:kaawa/widgets/listing_image.dart';
 
 /// ListingCarousel
 /// - Accepts a list of image paths (local file paths or http URLs).

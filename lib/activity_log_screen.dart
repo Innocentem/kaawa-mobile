@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa_mobile/data/database_helper.dart';
+import 'package:kaawa/data/database_helper.dart';
 import 'package:intl/intl.dart';
 import 'widgets/compact_loader.dart';
 
