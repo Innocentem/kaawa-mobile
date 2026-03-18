@@ -23,6 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _phoneNumberController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _showResetBanner = false;
+  bool _obscurePassword = true;
   final AuthService _authService = AuthService();
 
   @override
@@ -60,8 +61,14 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                obscureText: _obscurePassword,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter your password';

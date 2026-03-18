@@ -17,6 +17,7 @@ import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/interested_buyers_screen.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
 import 'package:kaawa/review_notifications_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
   final User farmer;
@@ -42,9 +43,42 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   Map<int, List<User>> _interestedByStock = {};
   List<CoffeeStock> _farmerStocks = [];
   final AuthService _auth_service = AuthService();
+
+  Future<void> _handleLogoutRequest() async {
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Logout?'),
+        content: const Text('Do you really want to logout?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Logout')),
+        ],
+      ),
+    );
+
+    if (shouldLogout != true) return;
+    await _auth_service.logout();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+      (route) => false,
+    );
+  }
+
+  Future<void> _logout() async {
+    await _handleLogoutRequest();
+  }
+
   Map<int, double> _buyerRatings = {};
   Map<int, int> _buyerReviewCounts = {};
   late User _currentFarmer;
+
+  final LayerLink _profileLink = LayerLink();
+  final LayerLink _addListingLink = LayerLink();
+  final GlobalKey _profileKey = GlobalKey();
+  final GlobalKey _addListingKey = GlobalKey();
 
   @override
   void initState() {
@@ -70,6 +104,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     _loadTotalInterestCount();
     _loadInterestedOverview();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadInterestedOverview());
+    _scheduleOnboardingGuides();
   }
 
   @override
@@ -296,15 +331,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     }
   }
 
-  Future<void> _logout() async {
-    await _auth_service.logout();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-      (route) => false,
-    );
-  }
-
   Future<void> _loadTotalInterestCount() async {
     final count = await DatabaseHelper.instance.getTotalInterestCountForFarmer(widget.farmer.id!);
     setState(() {
@@ -356,6 +382,109 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     await _refreshCurrentFarmer();
   }
 
+  Future<void> _scheduleOnboardingGuides() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'guide_farmer_home_v1_${widget.farmer.id}';
+    if (prefs.getBool(key) == true) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _showCoachMark(
+        link: _profileLink,
+        targetKey: _profileKey,
+        title: 'Update your profile',
+        message: 'Tap your avatar to edit your profile and photo.',
+      );
+      if (!mounted) return;
+      await _showCoachMark(
+        link: _addListingLink,
+        targetKey: _addListingKey,
+        title: 'Add a listing',
+        message: 'Use this button to add your coffee stock listings.',
+      );
+      await prefs.setBool(key, true);
+    });
+  }
+
+  Future<void> _showCoachMark({
+    required LayerLink link,
+    required GlobalKey targetKey,
+    required String title,
+    required String message,
+  }) async {
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+
+    final renderBox = targetKey.currentContext?.findRenderObject() as RenderBox?;
+    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+    final screenHeight = overlayBox?.size.height ?? MediaQuery.of(context).size.height;
+    final targetOffset = (renderBox != null && overlayBox != null)
+        ? renderBox.localToGlobal(Offset.zero, ancestor: overlayBox)
+        : Offset.zero;
+    final targetHeight = renderBox?.size.height ?? 0.0;
+    const tooltipHeightEstimate = 140.0;
+    final spaceAbove = targetOffset.dy;
+    final spaceBelow = screenHeight - (targetOffset.dy + targetHeight);
+    final showAbove = spaceAbove >= tooltipHeightEstimate || spaceAbove > spaceBelow;
+
+    final completer = Completer<void>();
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return GestureDetector(
+          onTap: () {
+            entry.remove();
+            completer.complete();
+          },
+          child: Material(
+            color: Colors.black54,
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  CompositedTransformFollower(
+                    link: link,
+                    targetAnchor: showAbove ? Alignment.topCenter : Alignment.bottomCenter,
+                    followerAnchor: showAbove ? Alignment.bottomCenter : Alignment.topCenter,
+                    offset: showAbove ? const Offset(0, -8) : const Offset(0, 8),
+                    showWhenUnlinked: false,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: Card(
+                          color: theme.colorScheme.surface,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 6),
+                                Text(message, style: theme.textTheme.bodyMedium),
+                                const SizedBox(height: 8),
+                                Text('Tap anywhere to continue', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    await completer.future;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -366,488 +495,517 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     final cardHeight = (120 * textScale).clamp(100.0, 320.0);
     final avatarSize = (44 * textScale).clamp(32.0, 80.0);
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: theme.colorScheme.primary,
-        // ensure icons use the onPrimary color for contrast
-        foregroundColor: theme.colorScheme.onPrimary,
-        iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-        actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-        title: Semantics(
-          label: 'Open profile',
-          button: true,
-          child: Tooltip(
-            message: 'Open profile',
-            child: InkWell(
-              borderRadius: BorderRadius.circular(28),
-              onTap: _openProfile,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  AppAvatar(
-                    filePath: _currentFarmer.profilePicturePath,
-                    imageUrl: _currentFarmer.profilePicturePath,
-                    size: 44,
-                  ),
-                  if (_unreadMessageCount > 0)
-                    Positioned(
-                      right: -8,
-                      top: -8,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.onError, width: 1.5)),
-                        constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
-                        child: Center(
-                          child: Text(
-                            _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
-                            style: TextStyle(color: theme.colorScheme.onError, fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-              color: theme.colorScheme.onPrimary,
-            ),
-            onPressed: () {
-              Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
-            },
-          ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.message),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ConversationsScreen(currentUser: widget.farmer),
-                    ),
-                  ).then((_) {
-                    // refresh unread messages count when returning
-                    _getUnreadMessageCount();
-                    // also refresh conversations/overview
-                    _loadInterestedOverview();
-                  });
-                },
-              ),
-              if (_unreadMessageCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.error,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      '$_unreadMessageCount',
-                      style: TextStyle(
-                        color: theme.colorScheme.onError,
-                        fontSize: 10,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          Stack(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.star_rate),
-                tooltip: 'Reviews',
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReviewNotificationsScreen(currentUser: _currentFarmer),
-                    ),
-                  );
-                  await _getUnreadReviewCount();
-                },
-              ),
-              if (_unreadReviewCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.error,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 16,
-                      minHeight: 16,
-                    ),
-                    child: Text(
-                      '$_unreadReviewCount',
-                      style: TextStyle(
-                        color: theme.colorScheme.onError,
-                        fontSize: 10,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.person),
-            onPressed: _openProfile,
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-          // Manage stock + interested buyers shortcut (shows badge with total interested buyers)
-          IconButton(
-            icon: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(Icons.group),
-                if (_totalInterestedCount > 0)
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
-                      child: Text('$_totalInterestedCount', style: TextStyle(color: theme.colorScheme.onError, fontSize: 10)),
-                    ),
-                  ),
-              ],
-            ),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ManageStockScreen(farmer: _currentFarmer),
-                ),
-              );
-              // refresh count after returning
-              _loadTotalInterestCount();
-            },
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ManageStockScreen(farmer: _currentFarmer),
-            ),
-          );
-        },
-        tooltip: 'Manage stock',
-        child: const Icon(Icons.inventory),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Interested buyers overview - shown only when there are interested buyers
-            if (_interestedByStock.isNotEmpty)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+    return WillPopScope(
+      onWillPop: () async {
+        await _handleLogoutRequest();
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          backgroundColor: theme.colorScheme.primary,
+          // ensure icons use the onPrimary color for contrast
+          foregroundColor: theme.colorScheme.onPrimary,
+          iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+          actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+          title: Semantics(
+            label: 'Open profile',
+            button: true,
+            child: Tooltip(
+              message: 'Open profile',
+              child: CompositedTransformTarget(
+                link: _profileLink,
+                child: InkWell(
+                  key: _profileKey,
+                  borderRadius: BorderRadius.circular(28),
+                  onTap: _openProfile,
+                  child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
-                      Text('Interested Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Tooltip(
-                        message: 'Tap a card to view interested buyers per stock.',
-                        child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                      AppAvatar(
+                        filePath: _currentFarmer.profilePicturePath,
+                        imageUrl: _currentFarmer.profilePicturePath,
+                        size: 44,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: cardHeight,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: _farmerStocks.length,
-                      itemBuilder: (context, idx) {
-                        final stock = _farmerStocks[idx];
-                        if (stock.id == null) return const SizedBox.shrink();
-                        final buyers = _interestedByStock[stock.id!] ?? [];
-                        if (buyers.isEmpty) return const SizedBox.shrink();
-
-                        return SizedBox(
-                          width: 220,
-                          height: cardHeight,
-                          child: Card(
-                            margin: const EdgeInsets.only(right: 12),
-                            child: InkWell(
-                              onTap: () async {
-                                await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock)),
-                                );
-                                _loadInterestedOverview();
-                              },
-                              child: Padding(
-                                padding: const EdgeInsets.all(8),
-                                child: SingleChildScrollView(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.center,
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              stock.coffeeType,
-                                              style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (buyers.isNotEmpty)
-                                            GestureDetector(
-                                              onTap: () async {
-                                                final buyer = buyers[0];
-                                                await Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer)),
-                                                );
-                                                _loadInterestedOverview();
-                                                _loadTotalInterestCount();
-                                                _getUnreadMessageCount();
-                                              },
-                                              child: Padding(
-                                                padding: const EdgeInsets.only(left: 8.0),
-                                                child: AppAvatar(
-                                                  filePath: buyers[0].profilePicturePath,
-                                                  imageUrl: buyers[0].profilePicturePath,
-                                                  size: avatarSize,
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text('${buyers.length} interested', style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                      const SizedBox(height: 6),
-                                      Flexible(
-                                        fit: FlexFit.loose,
-                                        child: Wrap(
-                                          spacing: 6,
-                                          runSpacing: 6,
-                                          children: List.generate(
-                                            buyers.length > 3 ? 3 : buyers.length,
-                                            (i) => AppAvatar(
-                                              filePath: buyers[i].profilePicturePath,
-                                              imageUrl: buyers[i].profilePicturePath,
-                                              size: avatarSize,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton(
-                                          onPressed: () async {
-                                            await Navigator.push(
-                                              context,
-                                              MaterialPageRoute(builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock)),
-                                            );
-                                            await _loadInterestedOverview();
-                                            await _loadTotalInterestCount();
-                                          },
-                                          child: const Text('View all'),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                      if (_unreadMessageCount > 0)
+                        Positioned(
+                          right: -8,
+                          top: -8,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.onError, width: 1.5)),
+                            constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                            child: Center(
+                              child: Text(
+                                _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
+                                style: TextStyle(color: theme.colorScheme.onError, fontSize: 11, fontWeight: FontWeight.bold),
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            IconButton(
+              icon: Icon(
+                Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                color: theme.colorScheme.onPrimary,
+              ),
+              onPressed: () {
+                Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
+              },
+            ),
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.message),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ConversationsScreen(currentUser: widget.farmer),
+                      ),
+                    ).then((_) {
+                      // refresh unread messages count when returning
+                      _getUnreadMessageCount();
+                      // also refresh conversations/overview
+                      _loadInterestedOverview();
+                    });
+                  },
+                ),
+                if (_unreadMessageCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.error,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$_unreadMessageCount',
+                        style: TextStyle(
+                          color: theme.colorScheme.onError,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-
-            // Available buyers section
-            Row(
-              children: [
-                Text('Available Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: 'Tap a buyer to view profile. Use star to favorite or message to chat.',
-                  child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
-                ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                labelText: 'Search by name or district',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.search),
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.star_rate),
+                  tooltip: 'Reviews',
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReviewNotificationsScreen(currentUser: _currentFarmer),
+                      ),
+                    );
+                    await _getUnreadReviewCount();
+                  },
+                ),
+                if (_unreadReviewCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.error,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$_unreadReviewCount',
+                        style: TextStyle(
+                          color: theme.colorScheme.onError,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            IconButton(
+              icon: const Icon(Icons.person),
+              onPressed: _openProfile,
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: _logout,
+            ),
+            // Manage stock + interested buyers shortcut (shows badge with total interested buyers)
+            IconButton(
+              icon: Stack(
+                alignment: Alignment.center,
+                children: [
+                  const Icon(Icons.group),
+                  if (_totalInterestedCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle),
+                        child: Text('$_totalInterestedCount', style: TextStyle(color: theme.colorScheme.onError, fontSize: 10)),
+                      ),
+                    ),
+                ],
               ),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ManageStockScreen(farmer: _currentFarmer),
+                  ),
+                );
+                // refresh count after returning
+                _loadTotalInterestCount();
+              },
             ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.sort),
-              label: Text(_sortByDistance ? 'Sort by Name' : 'Sort by Distance'),
-              onPressed: _toggleSortByDistance,
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: FutureBuilder<List<User>>(
-                future: _buyersFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading buyers'))));
-                  } else if (snapshot.hasError) {
-                    return const Center(child: Text('Error loading buyers.'));
-                  } else {
-                    _allBuyers = snapshot.data ?? [];
-                    _filteredBuyers = List.from(_allBuyers);
+          ],
+        ),
+        floatingActionButton: CompositedTransformTarget(
+          link: _addListingLink,
+          child: FloatingActionButton.extended(
+            key: _addListingKey,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ManageStockScreen(farmer: widget.farmer),
+                ),
+              );
+            },
+            label: const Text('Manage Stock'),
+            icon: const Icon(Icons.inventory),
+          ),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Interested buyers overview - shown only when there are interested buyers
+              if (_interestedByStock.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text('Interested Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 6),
+                        Tooltip(
+                          message: 'Tap a card to view interested buyers per stock.',
+                          child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: cardHeight,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _farmerStocks.length,
+                        itemBuilder: (context, idx) {
+                          final stock = _farmerStocks[idx];
+                          if (stock.id == null) return const SizedBox.shrink();
+                          final buyers = _interestedByStock[stock.id!] ?? [];
+                          if (buyers.isEmpty) return const SizedBox.shrink();
 
-                    final Widget content = _filteredBuyers.isEmpty && _searchController.text.isNotEmpty
-                        ? const Center(child: Text('No buyers found.'))
-                        : GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 16,
-                              mainAxisSpacing: 16,
-                              childAspectRatio: 0.75,
-                            ),
-                            itemCount: _filteredBuyers.length,
-                            itemBuilder: (context, index) {
-                              final buyer = _filteredBuyers[index];
-                              final isFavorite = _favoriteUserIds.contains(buyer.id);
-                              final distance = (widget.farmer.latitude != null &&
-                                      widget.farmer.longitude != null &&
-                                      buyer.latitude != null &&
-                                      buyer.longitude != null)
-                                  ? Geolocator.distanceBetween(widget.farmer.latitude!, widget.farmer.longitude!, buyer.latitude!, buyer.longitude!) / 1000
-                                  : null;
-
-                              return Card(
-                                elevation: 4,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                child: InkWell(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer)),
-                                    );
-                                  },
+                          return SizedBox(
+                            width: 220,
+                            height: cardHeight,
+                            child: Card(
+                              margin: const EdgeInsets.only(right: 12),
+                              child: InkWell(
+                                onTap: () async {
+                                  await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock)),
+                                  );
+                                  _loadInterestedOverview();
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8),
                                   child: SingleChildScrollView(
                                     child: Column(
+                                      mainAxisSize: MainAxisSize.min,
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        AspectRatio(
-                                          aspectRatio: 1,
-                                          child: AppAvatar(
-                                            filePath: buyer.profilePicturePath,
-                                            imageUrl: buyer.profilePicturePath,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                        Padding(
-                                          padding: const EdgeInsets.all(8.0),
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(buyer.fullName, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                                              const SizedBox(height: 4),
-                                              Text('District: ${buyer.district}'),
-                                              if (distance != null) Text('${distance.toStringAsFixed(1)} km away'),
-                                              const SizedBox(height: 6),
-                                              _buildRatingRow(
-                                                _buyerRatings[buyer.id] ?? 0.0,
-                                                _buyerReviewCounts[buyer.id] ?? 0,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Wrap(
-                                          alignment: WrapAlignment.spaceAround,
-                                          spacing: 6,
-                                          runSpacing: 4,
+                                        Row(
+                                          crossAxisAlignment: CrossAxisAlignment.center,
                                           children: [
-                                            IconButton(
-                                              icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? theme.colorScheme.secondary : theme.textTheme.bodySmall?.color, size: 20),
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              visualDensity: VisualDensity.compact,
-                                              onPressed: () => _toggleFavorite(buyer.id!),
+                                            Expanded(
+                                              child: Text(
+                                                stock.coffeeType,
+                                                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ),
-                                            IconButton(
-                                              icon: const Icon(Icons.message, size: 20),
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              visualDensity: VisualDensity.compact,
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => ChatScreen(currentUser: widget.farmer, otherUser: buyer),
+                                            if (buyers.isNotEmpty)
+                                              GestureDetector(
+                                                onTap: () async {
+                                                  final buyer = buyers[0];
+                                                  await Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer)),
+                                                  );
+                                                  _loadInterestedOverview();
+                                                  _loadTotalInterestCount();
+                                                  _getUnreadMessageCount();
+                                                },
+                                                child: Padding(
+                                                  padding: const EdgeInsets.only(left: 8.0),
+                                                  child: AppAvatar(
+                                                    filePath: buyers[0].profilePicturePath,
+                                                    imageUrl: buyers[0].profilePicturePath,
+                                                    size: avatarSize,
                                                   ),
-                                                ).then((_) => _getUnreadMessageCount());
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.campaign, size: 20),
-                                              tooltip: 'Share a listing',
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              visualDensity: VisualDensity.compact,
-                                              onPressed: () => _shareListingToBuyer(buyer),
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.phone, size: 20),
-                                              padding: EdgeInsets.zero,
-                                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                                              visualDensity: VisualDensity.compact,
-                                              onPressed: () => _makePhoneCall(buyer.phoneNumber),
-                                            ),
+                                                ),
+                                              ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Text('${buyers.length} interested', style: theme.textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                        const SizedBox(height: 6),
+                                        Flexible(
+                                          fit: FlexFit.loose,
+                                          child: Wrap(
+                                            spacing: 6,
+                                            runSpacing: 6,
+                                            children: List.generate(
+                                              buyers.length > 3 ? 3 : buyers.length,
+                                              (i) => AppAvatar(
+                                                filePath: buyers[i].profilePicturePath,
+                                                imageUrl: buyers[i].profilePicturePath,
+                                                size: avatarSize,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Align(
+                                          alignment: Alignment.centerRight,
+                                          child: TextButton(
+                                            onPressed: () async {
+                                              await Navigator.push(
+                                                context,
+                                                MaterialPageRoute(builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock)),
+                                              );
+                                              await _loadInterestedOverview();
+                                              await _loadTotalInterestCount();
+                                            },
+                                            child: const Text('View all'),
+                                          ),
                                         ),
                                       ],
                                     ),
                                   ),
                                 ),
-                              );
-                            },
+                              ),
+                            ),
                           );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
 
-                    return FadeTransition(opacity: _animation, child: content);
+              // Available buyers section
+              Row(
+                children: [
+                  Text('Available Buyers', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(width: 6),
+                  Tooltip(
+                    message: 'Tap a buyer to view profile. Use star to favorite or message to chat.',
+                    child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _searchController,
+                decoration: const InputDecoration(
+                  labelText: 'Search by name or district',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.search),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.sort),
+                label: Text(_sortByDistance ? 'Sort by Name' : 'Sort by Distance'),
+                onPressed: _toggleSortByDistance,
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: FutureBuilder<List<User>>(
+                  future: _buyersFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading buyers'))));
+                    } else if (snapshot.hasError) {
+                      return const Center(child: Text('Error loading buyers.'));
+                    } else {
+                      _allBuyers = snapshot.data ?? [];
+                      _filteredBuyers = List.from(_allBuyers);
+
+                      final Widget content = _filteredBuyers.isEmpty && _searchController.text.isNotEmpty
+                          ? const Center(child: Text('No buyers found.'))
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                                childAspectRatio: 0.75,
+                              ),
+                              itemCount: _filteredBuyers.length,
+                              itemBuilder: (context, index) {
+                                final buyer = _filteredBuyers[index];
+                                final isFavorite = _favoriteUserIds.contains(buyer.id);
+                                final distance = (widget.farmer.latitude != null &&
+                                        widget.farmer.longitude != null &&
+                                        buyer.latitude != null &&
+                                        buyer.longitude != null)
+                                    ? Geolocator.distanceBetween(widget.farmer.latitude!, widget.farmer.longitude!, buyer.latitude!, buyer.longitude!) / 1000
+                                    : null;
+
+                                return Card(
+                                  elevation: 4,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(builder: (context) => ProfileScreen(currentUser: widget.farmer, profileOwner: buyer)),
+                                      );
+                                    },
+                                    child: SingleChildScrollView(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          AspectRatio(
+                                            aspectRatio: 1,
+                                            child: AppAvatar(
+                                              filePath: buyer.profilePicturePath,
+                                              imageUrl: buyer.profilePicturePath,
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(8.0),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(buyer.fullName, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                                const SizedBox(height: 4),
+                                                Text('District: ${buyer.district}'),
+                                                if (distance != null) Text('${distance.toStringAsFixed(1)} km away'),
+                                                const SizedBox(height: 6),
+                                                _buildRatingRow(
+                                                  _buyerRatings[buyer.id] ?? 0.0,
+                                                  _buyerReviewCounts[buyer.id] ?? 0,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Wrap(
+                                            alignment: WrapAlignment.spaceAround,
+                                            spacing: 6,
+                                            runSpacing: 4,
+                                            children: [
+                                              IconButton(
+                                                icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: isFavorite ? theme.colorScheme.secondary : theme.textTheme.bodySmall?.color, size: 20),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                visualDensity: VisualDensity.compact,
+                                                onPressed: () => _toggleFavorite(buyer.id!),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.message, size: 20),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                visualDensity: VisualDensity.compact,
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (context) => ChatScreen(currentUser: widget.farmer, otherUser: buyer),
+                                                    ),
+                                                  ).then((_) => _getUnreadMessageCount());
+                                                },
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.campaign, size: 20),
+                                                tooltip: 'Share a listing',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                visualDensity: VisualDensity.compact,
+                                                onPressed: () => _shareListingToBuyer(buyer),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.phone, size: 20),
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                                visualDensity: VisualDensity.compact,
+                                                onPressed: () => _makePhoneCall(buyer.phoneNumber),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+
+                      return FadeTransition(opacity: _animation, child: content);
                   }
                 },
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

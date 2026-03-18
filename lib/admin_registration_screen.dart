@@ -3,6 +3,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/user_data.dart';
 import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/login_screen.dart';
 import 'widgets/compact_loader.dart';
 
 // NOTE: These are the single credentials the app will accept to create an admin account.
@@ -22,6 +23,7 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _submitting = false;
+  bool _obscurePassword = true;
 
   Future<void> _registerAdmin() async {
     if (!_formKey.currentState!.validate()) return;
@@ -45,7 +47,10 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
         // If already admin, we're done. Otherwise promote to admin and update password.
         if (existing.userType == UserType.admin) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Admin account already exists')));
-          Navigator.pop(context);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
           return;
         } else {
           final promoted = User(
@@ -63,7 +68,10 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
           );
           await DatabaseHelper.instance.updateUser(promoted);
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account promoted to admin')));
-          Navigator.pop(context);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
           return;
         }
       }
@@ -80,7 +88,10 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
 
       await DatabaseHelper.instance.insertUser(newUser);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Admin registered successfully')));
-      Navigator.pop(context);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
     } finally {
@@ -108,8 +119,14 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                obscureText: _obscurePassword,
                 validator: (v) => (v == null || v.isEmpty) ? 'Enter password' : null,
               ),
               const SizedBox(height: 16),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:kaawa/data/user_data.dart';
 import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/login_screen.dart';
 
 class FarmerRegistrationScreen extends StatefulWidget {
   const FarmerRegistrationScreen({super.key});
@@ -19,6 +20,9 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   final _districtController = TextEditingController();
   final _villageController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirm = true;
   Position? _currentPosition;
 
   Future<void> _getCurrentLocation() async {
@@ -70,8 +74,14 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                obscureText: _obscurePassword,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter a password';
@@ -80,8 +90,15 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                 },
               ),
               TextFormField(
-                decoration: const InputDecoration(labelText: 'Confirm Password'),
-                obscureText: true,
+                controller: _confirmPasswordController,
+                decoration: InputDecoration(
+                  labelText: 'Confirm Password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                ),
+                obscureText: _obscureConfirm,
                 validator: (value) {
                   if (value != _passwordController.text) {
                     return 'Passwords do not match';
@@ -137,7 +154,10 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Registration successful!')),
                     );
-                    Navigator.popUntil(context, (route) => route.isFirst);
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    );
                   }
                 },
                 child: const Text('Register'),

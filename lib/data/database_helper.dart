@@ -670,7 +670,7 @@ class DatabaseHelper {
 
   Future<List<CoffeeStock>> getAllCoffeeStock() async {
     final db = await instance.database;
-    final maps = await db.query('coffee_stock', where: 'isSold = 0');
+    final maps = await db.query('coffee_stock', orderBy: 'isSold ASC, id DESC');
     return maps.map((map) => CoffeeStock.fromMap(map)).toList();
   }
 

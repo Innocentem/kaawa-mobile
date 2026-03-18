@@ -18,6 +18,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   final _newPassword = TextEditingController();
   final _confirm = TextEditingController();
   bool _saving = false;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -60,14 +62,26 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               const SizedBox(height: 12),
               TextFormField(
                 controller: _newPassword,
-                decoration: const InputDecoration(labelText: 'New password'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'New password',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureNew ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscureNew = !_obscureNew),
+                  ),
+                ),
+                obscureText: _obscureNew,
                 validator: (v) => (v == null || v.length < 6) ? 'Password too short' : null,
               ),
               TextFormField(
                 controller: _confirm,
-                decoration: const InputDecoration(labelText: 'Confirm'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'Confirm',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
+                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                ),
+                obscureText: _obscureConfirm,
                 validator: (v) => (v != _newPassword.text) ? 'Passwords do not match' : null,
               ),
               const SizedBox(height: 16),

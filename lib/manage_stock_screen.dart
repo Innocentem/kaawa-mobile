@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,6 +11,7 @@ import 'package:kaawa/widgets/listing_carousel.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ManageStockScreen extends StatefulWidget {
   final User farmer;
@@ -22,6 +24,34 @@ class ManageStockScreen extends StatefulWidget {
 
 class _ManageStockScreenState extends State<ManageStockScreen> {
   late Future<List<CoffeeStock>> _stockFuture;
+  final LayerLink _editLink = LayerLink();
+  final GlobalKey _editKey = GlobalKey();
+  bool _guideScheduled = false;
+
+  List<String?> _parseImages(String? pathField) {
+    if (pathField == null || pathField.trim().isEmpty) return [null];
+    final parts = pathField.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    if (parts.isEmpty) return [null];
+    return parts;
+  }
+
+  Widget _buildSoldBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.error.withAlpha((0.9 * 255).round()),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        'SOLD',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onError,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -63,6 +93,105 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
     });
   }
 
+  Future<void> _scheduleEditGuide() async {
+    if (_guideScheduled) return;
+    _guideScheduled = true;
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'guide_manage_stock_v1_${widget.farmer.id}';
+    if (prefs.getBool(key) == true) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _showCoachMark(
+        link: _editLink,
+        targetKey: _editKey,
+        title: 'Edit or mark sold',
+        message: 'Use the pencil to edit a listing or the check to mark it sold.',
+      );
+      await prefs.setBool(key, true);
+    });
+  }
+
+  Future<void> _showCoachMark({
+    required LayerLink link,
+    required GlobalKey targetKey,
+    required String title,
+    required String message,
+  }) async {
+    final overlay = Overlay.of(context);
+    if (overlay == null) return;
+
+    final renderBox = targetKey.currentContext?.findRenderObject() as RenderBox?;
+    final overlayBox = overlay.context.findRenderObject() as RenderBox?;
+    final screenHeight = overlayBox?.size.height ?? MediaQuery.of(context).size.height;
+    final targetOffset = (renderBox != null && overlayBox != null)
+        ? renderBox.localToGlobal(Offset.zero, ancestor: overlayBox)
+        : Offset.zero;
+    final targetHeight = renderBox?.size.height ?? 0.0;
+    const tooltipHeightEstimate = 140.0;
+    final spaceAbove = targetOffset.dy;
+    final spaceBelow = screenHeight - (targetOffset.dy + targetHeight);
+    final showAbove = spaceAbove >= tooltipHeightEstimate || spaceAbove > spaceBelow;
+
+    final completer = Completer<void>();
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) {
+        final theme = Theme.of(context);
+        return GestureDetector(
+          onTap: () {
+            entry.remove();
+            completer.complete();
+          },
+          child: Material(
+            color: Colors.black54,
+            child: SafeArea(
+              child: Stack(
+                children: [
+                  CompositedTransformFollower(
+                    link: link,
+                    targetAnchor: showAbove ? Alignment.topCenter : Alignment.bottomCenter,
+                    followerAnchor: showAbove ? Alignment.bottomCenter : Alignment.topCenter,
+                    offset: showAbove ? const Offset(0, -8) : const Offset(0, 8),
+                    showWhenUnlinked: false,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 260),
+                        child: Card(
+                          color: theme.colorScheme.surface,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                const SizedBox(height: 6),
+                                Text(message, style: theme.textTheme.bodyMedium),
+                                const SizedBox(height: 8),
+                                Text('Tap anywhere to continue', style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+
+    overlay.insert(entry);
+    await completer.future;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -100,31 +229,52 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                   return const Center(child: Text('Error loading stock.'));
                 } else {
                   final stockItems = snapshot.data ?? [];
+                  if (stockItems.isNotEmpty) {
+                    _scheduleEditGuide();
+                  }
                   return stockItems.isEmpty
                       ? const Center(child: Text('No stock yet.'))
                       : ListView.builder(
                           itemCount: stockItems.length,
                           itemBuilder: (context, index) {
                             final stock = stockItems[index];
+                            final firstImage = _parseImages(stock.coffeePicturePath).first;
                             return Card(
                               margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                               child: ListTile(
-                                leading: stock.coffeePicturePath != null
+                                tileColor: stock.isSold ? theme.colorScheme.error.withAlpha((0.08 * 255).round()) : null,
+                                leading: firstImage != null
                                     ? SizedBox(
                                         width: 44,
                                         height: 44,
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(6),
-                                          child: ListingImage(path: stock.coffeePicturePath, fit: BoxFit.cover),
+                                          child: ListingImage(path: firstImage, fit: BoxFit.cover),
                                         ),
                                       )
                                     : const Icon(Icons.image, size: 40),
-                                title: Text(stock.coffeeType, maxLines: 1, overflow: TextOverflow.ellipsis),
-                                subtitle: Text('${stock.quantity} kg • UGX ${stock.pricePerKg}/kg', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(stock.coffeeType, maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                    if (stock.isSold) ...[
+                                      const SizedBox(width: 6),
+                                      _buildSoldBadge(theme),
+                                    ],
+                                  ],
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${stock.quantity} kg • UGX ${stock.pricePerKg}/kg', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    if (stock.isSold)
+                                      Text('SOLD', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.error, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
                                 trailing: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // Interested buyers button with count badge
                                     FutureBuilder<int>(
                                       future: DatabaseHelper.instance.getInterestCountForStock(stock.id!),
                                       builder: (context, snapshotCount) {
@@ -162,16 +312,26 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                     ),
                                     Tooltip(
                                       message: 'Edit listing',
-                                      child: IconButton(
-                                        icon: const Icon(Icons.edit),
-                                        onPressed: () => _showStockDialog(stock: stock),
-                                      ),
+                                      child: index == 0
+                                          ? CompositedTransformTarget(
+                                              link: _editLink,
+                                              child: IconButton(
+                                                key: _editKey,
+                                                icon: const Icon(Icons.edit),
+                                                onPressed: () => _showStockDialog(stock: stock),
+                                              ),
+                                            )
+                                          : IconButton(
+                                              icon: const Icon(Icons.edit),
+                                              onPressed: () => _showStockDialog(stock: stock),
+                                            ),
                                     ),
                                     Tooltip(
                                       message: stock.isSold ? 'Mark as available' : 'Mark as sold',
-                                      child: IconButton(
-                                        icon: Icon(stock.isSold ? Icons.undo : Icons.check),
+                                      child: TextButton.icon(
                                         onPressed: () => _toggleSoldStatus(stock),
+                                        icon: Icon(stock.isSold ? Icons.undo : Icons.check),
+                                        label: Text(stock.isSold ? 'Mark available' : 'Mark sold'),
                                       ),
                                     ),
                                   ],
@@ -207,20 +367,49 @@ class _StockDialog extends StatefulWidget {
 
 class _StockDialogState extends State<_StockDialog> {
   final _formKey = GlobalKey<FormState>();
-  late TextEditingController _coffeeTypeController;
   late TextEditingController _quantityController;
   late TextEditingController _pricePerKgController;
   late TextEditingController _descriptionController;
+  final TextEditingController _otherCoffeeTypeController = TextEditingController();
   String? _coffeePicturePath;
+  String? _selectedCoffeeType;
+
+  static const List<String> _coffeeTypes = [
+    'Arabica',
+    'Robusta',
+    'Liberica',
+    'Excelsa',
+    'Cherry',
+    'Green (raw)',
+    'Dried',
+    'Roasted',
+    'Processed',
+    'Other',
+  ];
 
   @override
   void initState() {
     super.initState();
-    _coffeeTypeController = TextEditingController(text: widget.stock?.coffeeType);
     _quantityController = TextEditingController(text: widget.stock?.quantity.toString());
     _pricePerKgController = TextEditingController(text: widget.stock?.pricePerKg.toString());
     _descriptionController = TextEditingController(text: widget.stock?.description ?? '');
     _coffeePicturePath = widget.stock?.coffeePicturePath;
+
+    final initialType = widget.stock?.coffeeType?.trim();
+    if (initialType != null && initialType.isNotEmpty) {
+      if (_coffeeTypes.contains(initialType)) {
+        _selectedCoffeeType = initialType;
+      } else {
+        _selectedCoffeeType = 'Other';
+        _otherCoffeeTypeController.text = initialType;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _otherCoffeeTypeController.dispose();
+    super.dispose();
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -274,10 +463,14 @@ class _StockDialogState extends State<_StockDialog> {
 
   Future<void> _saveStock() async {
     if (_formKey.currentState!.validate()) {
+      final coffeeType = _selectedCoffeeType == 'Other'
+          ? _otherCoffeeTypeController.text.trim()
+          : (_selectedCoffeeType ?? '');
+
       final newStock = CoffeeStock(
         id: widget.stock?.id,
         farmerId: widget.farmerId,
-        coffeeType: _coffeeTypeController.text,
+        coffeeType: coffeeType,
         quantity: double.parse(_quantityController.text),
         pricePerKg: double.parse(_pricePerKgController.text),
         coffeePicturePath: _coffeePicturePath,
@@ -321,16 +514,36 @@ class _StockDialogState extends State<_StockDialog> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextFormField(
-                          controller: _coffeeTypeController,
-                          decoration: const InputDecoration(labelText: 'Coffee Type'),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter the coffee type';
-                            }
-                            return null;
+                        DropdownButtonFormField<String>(
+                          value: _selectedCoffeeType,
+                          items: _coffeeTypes
+                              .map((type) => DropdownMenuItem<String>(
+                                    value: type,
+                                    child: Text(type),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedCoffeeType = value;
+                              if (value != 'Other') {
+                                _otherCoffeeTypeController.clear();
+                              }
+                            });
                           },
+                          decoration: const InputDecoration(labelText: 'Select Coffee Type'),
+                          validator: (value) => (value == null || value.isEmpty) ? 'Please select the coffee type' : null,
                         ),
+                        if (_selectedCoffeeType == 'Other')
+                          TextFormField(
+                            controller: _otherCoffeeTypeController,
+                            decoration: const InputDecoration(labelText: 'Other Coffee Type'),
+                            validator: (value) {
+                              if (_selectedCoffeeType == 'Other' && (value == null || value.trim().isEmpty)) {
+                                return 'Please specify the coffee type';
+                              }
+                              return null;
+                            },
+                          ),
                         TextFormField(
                           controller: _quantityController,
                           decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
