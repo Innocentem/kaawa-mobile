@@ -489,6 +489,7 @@ class _StockDialogState extends State<_StockDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final maxHeight = MediaQuery.of(context).size.height * 0.8;
     final maxWidth = MediaQuery.of(context).size.width * 0.9;
     return Dialog(
@@ -530,7 +531,14 @@ class _StockDialogState extends State<_StockDialog> {
                               }
                             });
                           },
-                          decoration: const InputDecoration(labelText: 'Select Coffee Type'),
+                          decoration: InputDecoration(
+                            labelText: 'Select Coffee Type',
+                            filled: true,
+                            fillColor: theme.brightness == Brightness.light
+                                ? theme.colorScheme.surfaceVariant.withAlpha(230)
+                                : theme.colorScheme.surfaceVariant.withAlpha(120),
+                            border: const OutlineInputBorder(),
+                          ),
                           validator: (value) => (value == null || value.isEmpty) ? 'Please select the coffee type' : null,
                         ),
                         if (_selectedCoffeeType == 'Other')

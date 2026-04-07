@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/chat_screen.dart';
@@ -10,6 +11,8 @@ import 'package:kaawa/profile_screen.dart';
 import 'package:kaawa/theme/theme.dart';
 import 'package:provider/provider.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/cart_item.dart';
+import 'package:kaawa/cart_screen.dart';
 import 'package:kaawa/widgets/listing_carousel.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
@@ -41,6 +44,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   final AuthService _authService = AuthService();
   late User _currentBuyer;
 
+  // Cart state
+  Map<int, CartItem> _cart = {}; // stock.id -> CartItem
+  int _cartItemCount = 0;
+
   final LayerLink _profileLink = LayerLink();
   final LayerLink _messageLink = LayerLink();
   final GlobalKey _profileKey = GlobalKey();
@@ -56,6 +63,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     _searchController.addListener(_filterCoffeeStock);
     _getUnreadMessageCount();
     _getUnreadReviewCount();
+    _loadCartFromPrefs();
 
     _animationController = AnimationController(
       vsync: this,
@@ -74,6 +82,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _animationController.dispose();
+    // Do not clear cart on dispose; cart is persisted across sessions unless user clears it
     super.dispose();
   }
 
@@ -180,6 +189,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     );
 
     if (shouldLogout != true) return;
+    // Do NOT clear the cart on logout. Cart is persisted across sessions so user can track progress.
+    // Pending requests and unsent requests remain in the cart until the user clears them.
     await _authService.logout();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
@@ -200,6 +211,112 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       await launchUrl(uri);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not open dialer')));
+    }
+  }
+
+  void _addToCart(CoffeeStock stock, User farmer, double quantity) {
+    if (stock.id == null) return;
+    final sid = stock.id!;
+    setState(() {
+      if (_cart.containsKey(sid)) {
+        // merge quantities instead of creating duplicate entries
+        final existing = _cart[sid]!;
+        final newQty = existing.quantityKg + quantity;
+        _cart[sid] = CartItem(
+          id: existing.id,
+          buyerId: existing.buyerId,
+          stock: existing.stock,
+          farmer: existing.farmer,
+          quantityKg: newQty,
+          addedAt: existing.addedAt,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Updated ${stock.coffeeType} to ${newQty} Kg in cart')));
+      } else {
+        _cart[sid] = CartItem(
+          id: DateTime.now().millisecondsSinceEpoch,
+          buyerId: widget.buyer.id!,
+          stock: stock,
+          farmer: farmer,
+          quantityKg: quantity,
+          addedAt: DateTime.now(),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${quantity} Kg of ${stock.coffeeType} to cart'),
+            action: SnackBarAction(
+              label: 'View Cart',
+              onPressed: () async {
+                final result = await Navigator.push<Map<int, CartItem>>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart),
+                  ),
+                );
+                if (result != null) {
+                  setState(() {
+                    _cart = result;
+                    _cartItemCount = _cart.length;
+                  });
+                  _saveCartToPrefs();
+                }
+              },
+            ),
+          ),
+        );
+      }
+
+      _cartItemCount = _cart.length;
+      _saveCartToPrefs();
+    });
+  }
+
+  Future<void> _saveCartToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final items = _cart.values.map((c) => {
+            'stockId': c.stock.id,
+            'farmerId': c.farmer.id,
+            'quantityKg': c.quantityKg,
+            'addedAt': c.addedAt.toIso8601String(),
+          }).toList();
+      await prefs.setString('cart_${widget.buyer.id}', jsonEncode(items));
+    } catch (_) {
+      // ignore persistence errors
+    }
+  }
+
+  Future<void> _loadCartFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final s = prefs.getString('cart_${widget.buyer.id}');
+      if (s == null || s.isEmpty) return;
+      final List<dynamic> list = jsonDecode(s);
+      final Map<int, CartItem> loaded = {};
+      for (final entry in list) {
+        final stockId = (entry['stockId'] as num?)?.toInt();
+        final farmerId = (entry['farmerId'] as num?)?.toInt();
+        final quantity = (entry['quantityKg'] as num?)?.toDouble() ?? 0.0;
+        final addedAtStr = entry['addedAt'] as String?;
+        if (stockId == null || farmerId == null) continue;
+        final stock = await DatabaseHelper.instance.getCoffeeStockById(stockId);
+        final farmer = await DatabaseHelper.instance.getUserById(farmerId);
+        if (stock == null || farmer == null) continue;
+        loaded[stockId] = CartItem(
+          id: DateTime.now().millisecondsSinceEpoch,
+          buyerId: widget.buyer.id!,
+          stock: stock,
+          farmer: farmer,
+          quantityKg: quantity,
+          addedAt: addedAtStr != null ? DateTime.parse(addedAtStr) : DateTime.now(),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _cart = loaded;
+        _cartItemCount = _cart.length;
+      });
+    } catch (_) {
+      // ignore
     }
   }
 
@@ -444,43 +561,89 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
               ),
             ),
           ),
-          actions: [
-            IconButton(
-              icon: Icon(
-                Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-                color: theme.colorScheme.onPrimary,
-              ),
-              onPressed: () {
-                Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
-              },
-            ),
-            Stack(
-              children: [
-                CompositedTransformTarget(
-                  link: _messageLink,
-                  child: IconButton(
-                    key: _messageKey,
-                    icon: const Icon(Icons.message),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ConversationsScreen(currentUser: widget.buyer),
-                        ),
-                      ).then((_) => _getUnreadMessageCount());
-                    },
-                  ),
-                ),
-                if (_unreadMessageCount > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.error,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+           actions: [
+             IconButton(
+               icon: Icon(
+                 Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                 color: theme.colorScheme.onPrimary,
+               ),
+               onPressed: () {
+                 Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
+               },
+             ),
+             Stack(
+               children: [
+                 IconButton(
+                   icon: const Icon(Icons.shopping_cart),
+                   tooltip: 'Shopping Cart',
+                   onPressed: () async {
+                     final result = await Navigator.push<Map<int, CartItem>>(
+                       context,
+                       MaterialPageRoute(
+                         builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart),
+                       ),
+                     );
+                     if (result != null) {
+                       setState(() {
+                         _cart = result;
+                         _cartItemCount = _cart.length;
+                       });
+                     }
+                   },
+                 ),
+                 if (_cartItemCount > 0)
+                   Positioned(
+                     right: 8,
+                     top: 8,
+                     child: Container(
+                       padding: const EdgeInsets.all(2),
+                       decoration: BoxDecoration(
+                         color: theme.colorScheme.error,
+                         borderRadius: BorderRadius.circular(8),
+                       ),
+                       constraints: const BoxConstraints(
+                         minWidth: 16,
+                         minHeight: 16,
+                       ),
+                       child: Text(
+                         _cartItemCount > 99 ? '99+' : '$_cartItemCount',
+                         style: TextStyle(
+                           color: theme.colorScheme.onError,
+                           fontSize: 10,
+                         ),
+                         textAlign: TextAlign.center,
+                       ),
+                     ),
+                   ),
+               ],
+             ),
+             Stack(
+               children: [
+                 CompositedTransformTarget(
+                   link: _messageLink,
+                   child: IconButton(
+                     key: _messageKey,
+                     icon: const Icon(Icons.message),
+                     onPressed: () {
+                       Navigator.push(
+                         context,
+                         MaterialPageRoute(
+                           builder: (context) => ConversationsScreen(currentUser: widget.buyer),
+                         ),
+                       ).then((_) => _getUnreadMessageCount());
+                     },
+                   ),
+                 ),
+                 if (_unreadMessageCount > 0)
+                   Positioned(
+                     right: 8,
+                     top: 8,
+                     child: Container(
+                       padding: const EdgeInsets.all(2),
+                       decoration: BoxDecoration(
+                         color: theme.colorScheme.error,
+                         borderRadius: BorderRadius.circular(8),
+                       ),
                       constraints: const BoxConstraints(
                         minWidth: 16,
                         minHeight: 16,
@@ -630,16 +793,22 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                                   children: [
                                                     Positioned.fill(
                                                       child: GestureDetector(
-                                                        onTap: () async {
-                                                          // fetch farmer and open product detail (pass current buyer as currentUser)
-                                                          final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                          Navigator.push(
-                                                            context,
-                                                            MaterialPageRoute(
-                                                              builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
-                                                            ),
-                                                          );
-                                                        },
+                                        onTap: () async {
+                                                           // fetch farmer and open product detail (pass current buyer as currentUser)
+                                                           final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
+                                                           final result = await Navigator.push<Map<String, dynamic>>(
+                                                             context,
+                                                             MaterialPageRoute(
+                                                               builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
+                                                             ),
+                                                           );
+
+                                                           // Handle cart addition
+                                                           if (result != null && result['action'] == 'add_to_cart' && farmer != null) {
+                                                             final quantity = result['quantity'] as double;
+                                                             _addToCart(stock, farmer, quantity);
+                                                           }
+                                                         },
                                                         child: ListingCarousel(images: images, fit: BoxFit.cover),
                                                       ),
                                                     ),

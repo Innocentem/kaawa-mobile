@@ -26,6 +26,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _interestedCount = 0;
   bool _reviewStatusLoaded = false;
   bool _alreadyReviewed = false;
+  double _selectedQuantity = 1.0;
 
   @override
   void initState() {
@@ -212,8 +213,148 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 const SizedBox(height: 12),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(widget.stock.description),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Description',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(widget.stock.description),
+                    ],
+                  ),
                 ),
+                const SizedBox(height: 20),
+                if (!widget.stock.isSold && widget.currentUser != null && widget.currentUser!.userType == UserType.buyer)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Available Quantity', style: theme.textTheme.bodySmall),
+                                Text('${widget.stock.quantity} Kg', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('Unit Price', style: theme.textTheme.bodySmall),
+                                Text('UGX ${widget.stock.pricePerKg}/Kg', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // Quantity selector
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: theme.colorScheme.outline),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Select Quantity (Kg)', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.remove_circle_outline),
+                                    onPressed: _selectedQuantity > 1
+                                        ? () => setState(() => _selectedQuantity = _selectedQuantity - 1)
+                                        : null,
+                                  ),
+                                  Expanded(
+                                    child: TextField(
+                                      textAlign: TextAlign.center,
+                                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                      controller: TextEditingController(text: _selectedQuantity.toStringAsFixed(1)),
+                                      onChanged: (value) {
+                                        final parsed = double.tryParse(value);
+                                        if (parsed != null && parsed > 0 && parsed <= widget.stock.quantity) {
+                                          setState(() => _selectedQuantity = parsed);
+                                        }
+                                      },
+                                      decoration: InputDecoration(
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                        isDense: true,
+                                        suffixText: 'Kg',
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_circle_outline),
+                                    onPressed: _selectedQuantity < widget.stock.quantity
+                                        ? () => setState(() => _selectedQuantity = _selectedQuantity + 1)
+                                        : null,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text('Total Cost:', style: theme.textTheme.bodySmall),
+                                  Text(
+                                    'UGX ${(widget.stock.pricePerKg * _selectedQuantity).toStringAsFixed(0)}',
+                                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Action buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context, {
+                                    'action': 'add_to_cart',
+                                    'quantity': _selectedQuantity,
+                                  });
+                                },
+                                icon: const Icon(Icons.shopping_cart),
+                                label: const Text('Add to Cart'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  if (widget.currentUser != null && widget.farmer != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ChatScreen(
+                                          currentUser: widget.currentUser!,
+                                          otherUser: widget.farmer!,
+                                          coffeeStock: widget.stock,
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.message),
+                                label: const Text('Message'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 20),
                 if (widget.currentUser != null && widget.farmer != null && widget.currentUser!.id != widget.farmer!.id && widget.currentUser!.userType != UserType.admin && widget.farmer!.userType != UserType.admin)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -235,6 +376,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       child: Text(_alreadyReviewed ? 'Review already submitted' : 'Write a Review'),
                     ),
                   ),
+                const SizedBox(height: 16),
               ],
             ),
           ),

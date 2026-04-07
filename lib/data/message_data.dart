@@ -7,6 +7,8 @@ class Message {
   final DateTime timestamp;
   final bool isRead;
   final int? coffeeStockId;
+  final bool isPurchaseRequest;
+  final String? purchaseRequestData; // JSON encoded cart items
 
   Message({
     this.id,
@@ -16,6 +18,8 @@ class Message {
     required this.timestamp,
     this.isRead = false,
     this.coffeeStockId,
+    this.isPurchaseRequest = false,
+    this.purchaseRequestData,
   });
 
   Map<String, dynamic> toMap() {
@@ -27,6 +31,8 @@ class Message {
       'timestamp': timestamp.toIso8601String(),
       'isRead': isRead ? 1 : 0,
       'coffeeStockId': coffeeStockId,
+      'isPurchaseRequest': isPurchaseRequest ? 1 : 0,
+      'purchaseRequestData': purchaseRequestData,
     };
   }
 
@@ -39,6 +45,8 @@ class Message {
       timestamp: DateTime.parse(map['timestamp']),
       isRead: map['isRead'] == 1,
       coffeeStockId: map['coffeeStockId'],
+      isPurchaseRequest: (map['isPurchaseRequest'] ?? 0) == 1,
+      purchaseRequestData: map['purchaseRequestData'],
     );
   }
 }

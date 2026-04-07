@@ -22,8 +22,8 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 27: add unique reviewer/reviewed index
-    return await openDatabase(path, version: 27, onCreate: _createDb, onUpgrade: _onUpgrade);
+    // bump DB version to 28: add purchase request fields to messages table
+    return await openDatabase(path, version: 28, onCreate: _createDb, onUpgrade: _onUpgrade);
   }
 
   Future<void> _createDb(Database db, int version) async {
@@ -73,7 +73,9 @@ class DatabaseHelper {
         text TEXT NOT NULL,
         timestamp TEXT NOT NULL,
         isRead INTEGER NOT NULL DEFAULT 0,
-        coffeeStockId INTEGER
+        coffeeStockId INTEGER,
+        isPurchaseRequest INTEGER NOT NULL DEFAULT 0,
+        purchaseRequestData TEXT
       )
     ''');
   }
@@ -215,6 +217,14 @@ class DatabaseHelper {
     }
     if (oldVersion < 27) {
       await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reviews_unique_reviewer_reviewed ON reviews(reviewerId, reviewedUserId)');
+    }
+    if (oldVersion < 28) {
+      try {
+        await db.execute('ALTER TABLE messages ADD COLUMN isPurchaseRequest INTEGER NOT NULL DEFAULT 0');
+        await db.execute('ALTER TABLE messages ADD COLUMN purchaseRequestData TEXT');
+      } catch (e) {
+        // ignore if columns already exist
+      }
     }
   }
 
@@ -422,99 +432,16 @@ class DatabaseHelper {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
-  Future<List<Conversation>> getConversations(int userId) async {
+  /// Get all purchase requests received by a farmer (receiverId = farmer)
+  Future<List<Message>> getPurchaseRequestsForFarmer(int farmerId) async {
     final db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT
-        m.id,
-        m.senderId,
-        m.receiverId,
-        m.text,
-        m.timestamp,
-        m.isRead,
-        m.coffeeStockId
-      FROM messages m
-      INNER JOIN (
-        SELECT
-          CASE WHEN senderId = ? THEN receiverId ELSE senderId END as otherUserId,
-          MAX(timestamp) as maxTimestamp
-        FROM messages
-        WHERE senderId = ? OR receiverId = ?
-        GROUP BY otherUserId
-      ) as last_message ON (
-        CASE WHEN m.senderId = ? THEN m.receiverId ELSE m.senderId END = last_message.otherUserId
-        AND m.timestamp = last_message.maxTimestamp
-      )
-      ORDER BY m.timestamp DESC
-    ''', [userId, userId, userId, userId]);
-
-    final conversations = <Conversation>[];
-    for (final map in maps) {
-      final lastMessage = Message.fromMap(map);
-      final otherUserId = lastMessage.senderId == userId ? lastMessage.receiverId : lastMessage.senderId;
-      final otherUser = await getUserById(otherUserId);
-      if (otherUser == null) {
-        // Skip conversations that reference deleted/missing users.
-        continue;
-      }
-      CoffeeStock? coffeeStock;
-      if (lastMessage.coffeeStockId != null) {
-        coffeeStock = await getCoffeeStockById(lastMessage.coffeeStockId!);
-      }
-      conversations.add(Conversation(
-        otherUser: otherUser,
-        lastMessage: lastMessage,
-        coffeeStock: coffeeStock,
-      ));
-    }
-    return conversations;
-  }
-
-  Future<int> insertReview(Review review) async {
-    final db = await instance.database;
-    final alreadyReviewed = await hasReviewByUser(review.reviewerId, review.reviewedUserId);
-    if (alreadyReviewed) {
-      return -1;
-    }
-    final reviewId = await db.insert('reviews', review.toMap());
-    await db.insert('review_notifications', {
-      'reviewedUserId': review.reviewedUserId,
-      'reviewerId': review.reviewerId,
-      'reviewId': reviewId,
-      'createdAt': DateTime.now().toIso8601String(),
-      'isRead': 0,
-    });
-    return reviewId;
-  }
-
-  Future<bool> hasReviewByUser(int reviewerId, int reviewedUserId) async {
-    final db = await instance.database;
-    final rows = await db.query(
-      'reviews',
-      columns: ['id'],
-      where: 'reviewerId = ? AND reviewedUserId = ?',
-      whereArgs: [reviewerId, reviewedUserId],
-      limit: 1,
+    final maps = await db.query(
+      'messages',
+      where: 'receiverId = ? AND isPurchaseRequest = 1',
+      whereArgs: [farmerId],
+      orderBy: 'timestamp DESC',
     );
-    return rows.isNotEmpty;
-  }
-
-  /// Returns average rating and review count for a user.
-  Future<Map<String, dynamic>> getRatingSummaryForUser(int reviewedUserId) async {
-    final db = await instance.database;
-    final rows = await db.rawQuery(
-      'SELECT AVG(rating) as avgRating, COUNT(*) as c FROM reviews WHERE reviewedUserId = ?',
-      [reviewedUserId],
-    );
-    if (rows.isEmpty) {
-      return {'avg': 0.0, 'count': 0};
-    }
-    final row = rows.first;
-    final avgRaw = row['avgRating'];
-    final countRaw = row['c'];
-    final avg = avgRaw is num ? avgRaw.toDouble() : double.tryParse(avgRaw?.toString() ?? '') ?? 0.0;
-    final count = countRaw is num ? countRaw.toInt() : int.tryParse(countRaw?.toString() ?? '') ?? 0;
-    return {'avg': avg, 'count': count};
+    return maps.map((map) => Message.fromMap(map)).toList();
   }
 
   Future<int> getUnreadReviewNotificationCount(int reviewedUserId) async {
@@ -877,5 +804,321 @@ class DatabaseHelper {
     final db = await instance.database;
     final maps = await db.query('users', orderBy: 'fullName COLLATE NOCASE');
     return maps.map((m) => User.fromMap(m)).toList();
+  }
+
+  /// Get conversations for a user with the latest message and coffee stock info
+  Future<List<Conversation>> getConversations(int userId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT
+        m.id,
+        m.senderId,
+        m.receiverId,
+        m.text,
+        m.timestamp,
+        m.isRead,
+        m.coffeeStockId,
+        u.id as other_user_id,
+        u.fullName as other_user_fullName,
+        u.phoneNumber as other_user_phoneNumber,
+        u.district as other_user_district,
+        u.password as other_user_password,
+        u.userType as other_user_userType,
+        u.profilePicturePath as other_user_profilePicturePath,
+        u.latitude as other_user_latitude,
+        u.longitude as other_user_longitude,
+        u.village as other_user_village,
+        cs.id as stock_id,
+        cs.farmerId as stock_farmerId,
+        cs.coffeeType as stock_coffeeType,
+        cs.quantity as stock_quantity,
+        cs.pricePerKg as stock_pricePerKg,
+        cs.coffeePicturePath as stock_coffeePicturePath,
+        cs.description as stock_description,
+        cs.isSold as stock_isSold
+      FROM (
+        SELECT * FROM messages
+        WHERE (senderId = ? OR receiverId = ?)
+        ORDER BY timestamp DESC
+      ) m
+      LEFT JOIN users u ON (
+        CASE 
+          WHEN m.senderId = ? THEN m.receiverId = u.id
+          ELSE m.senderId = u.id
+        END
+      )
+      LEFT JOIN coffee_stock cs ON m.coffeeStockId = cs.id
+      GROUP BY CASE WHEN m.senderId = ? THEN m.receiverId ELSE m.senderId END
+    ''', [userId, userId, userId, userId]);
+
+    final List<Conversation> conversations = [];
+    for (final map in maps) {
+      User? otherUser;
+      if (map['other_user_id'] != null) {
+        otherUser = User(
+          id: map['other_user_id'] as int?,
+          fullName: map['other_user_fullName']?.toString() ?? '',
+          phoneNumber: map['other_user_phoneNumber']?.toString() ?? '',
+          district: map['other_user_district']?.toString() ?? '',
+          password: map['other_user_password']?.toString() ?? '',
+          userType: (map['other_user_userType'] != null && map['other_user_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
+          profilePicturePath: map['other_user_profilePicturePath']?.toString(),
+          latitude: map['other_user_latitude'] is num ? (map['other_user_latitude'] as num).toDouble() : null,
+          longitude: map['other_user_longitude'] is num ? (map['other_user_longitude'] as num).toDouble() : null,
+          village: map['other_user_village']?.toString(),
+        );
+      }
+
+      final lastMessage = Message(
+        id: map['id'] as int?,
+        senderId: map['senderId'] as int,
+        receiverId: map['receiverId'] as int,
+        text: map['text']?.toString() ?? '',
+        timestamp: DateTime.parse(map['timestamp']?.toString() ?? DateTime.now().toIso8601String()),
+        isRead: (map['isRead'] as int?) == 1,
+        coffeeStockId: map['coffeeStockId'] as int?,
+      );
+
+      CoffeeStock? coffeeStock;
+      if (map['stock_id'] != null) {
+        coffeeStock = CoffeeStock(
+          id: map['stock_id'] as int?,
+          farmerId: map['stock_farmerId'] as int,
+          coffeeType: map['stock_coffeeType']?.toString() ?? '',
+          quantity: map['stock_quantity'] is num ? (map['stock_quantity'] as num).toDouble() : 0,
+          pricePerKg: map['stock_pricePerKg'] is num ? (map['stock_pricePerKg'] as num).toDouble() : 0,
+          coffeePicturePath: map['stock_coffeePicturePath']?.toString(),
+          description: map['stock_description']!.toString(),
+          isSold: (map['stock_isSold'] as int?) == 1,
+        );
+      }
+
+      if (otherUser != null) {
+        conversations.add(Conversation(
+          otherUser: otherUser,
+          lastMessage: lastMessage,
+          coffeeStock: coffeeStock,
+        ));
+      }
+    }
+
+    return conversations;
+  }
+
+  /// Check if a user has already reviewed another user
+  Future<bool> hasReviewByUser(int reviewerId, int reviewedUserId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'reviews',
+      where: 'reviewerId = ? AND reviewedUserId = ?',
+      whereArgs: [reviewerId, reviewedUserId],
+    );
+    return maps.isNotEmpty;
+  }
+
+  /// Insert a new review
+  Future<int> insertReview(Review review) async {
+    final db = await instance.database;
+    return await db.insert('reviews', review.toMap());
+  }
+
+  /// Get rating summary for a user (average rating and count)
+  Future<Map<String, dynamic>> getRatingSummaryForUser(int userId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      'SELECT AVG(rating) as avg, COUNT(*) as count FROM reviews WHERE reviewedUserId = ?',
+      [userId],
+    );
+    
+    if (result.isNotEmpty && result.first['avg'] != null) {
+      return {
+        'avg': result.first['avg'],
+        'count': result.first['count'] ?? 0,
+      };
+    }
+    
+    return {'avg': 0.0, 'count': 0};
+  }
+
+  // ======================== PURCHASE REQUEST RESPONSE HELPERS ========================
+
+  /// Get a specific purchase request message with full buyer and farmer details
+  Future<Map<String, dynamic>?> getPurchaseRequestWithDetails(int messageId) async {
+    final db = await instance.database;
+    final result = await db.rawQuery('''
+      SELECT
+        m.id,
+        m.senderId,
+        m.receiverId,
+        m.text,
+        m.timestamp,
+        m.isRead,
+        m.isPurchaseRequest,
+        m.purchaseRequestData,
+        buyer.id as buyer_id,
+        buyer.fullName as buyer_fullName,
+        buyer.phoneNumber as buyer_phoneNumber,
+        buyer.district as buyer_district,
+        buyer.userType as buyer_userType,
+        buyer.profilePicturePath as buyer_profilePicturePath,
+        farmer.id as farmer_id,
+        farmer.fullName as farmer_fullName,
+        farmer.phoneNumber as farmer_phoneNumber,
+        farmer.district as farmer_district,
+        farmer.userType as farmer_userType,
+        farmer.profilePicturePath as farmer_profilePicturePath
+      FROM messages m
+      LEFT JOIN users buyer ON m.senderId = buyer.id
+      LEFT JOIN users farmer ON m.receiverId = farmer.id
+      WHERE m.id = ? AND m.isPurchaseRequest = 1
+    ''', [messageId]);
+
+    if (result.isEmpty) return null;
+
+    final row = result.first;
+    return {
+      'messageId': row['id'],
+      'senderId': row['senderId'],
+      'receiverId': row['receiverId'],
+      'text': row['text'],
+      'timestamp': row['timestamp'],
+      'isRead': row['isRead'],
+      'purchaseRequestData': row['purchaseRequestData'],
+      'buyer': {
+        'id': row['buyer_id'],
+        'fullName': row['buyer_fullName'],
+        'phoneNumber': row['buyer_phoneNumber'],
+        'district': row['buyer_district'],
+        'userType': row['buyer_userType'],
+        'profilePicturePath': row['buyer_profilePicturePath'],
+      },
+      'farmer': {
+        'id': row['farmer_id'],
+        'fullName': row['farmer_fullName'],
+        'phoneNumber': row['farmer_phoneNumber'],
+        'district': row['farmer_district'],
+        'userType': row['farmer_userType'],
+        'profilePicturePath': row['farmer_profilePicturePath'],
+      },
+    };
+  }
+
+  /// Send a response message to a purchase request
+  /// Returns the ID of the sent message
+  Future<int> respondToPurchaseRequest(int purchaseRequestMessageId, String responseText, int farmerId, int buyerId) async {
+    final db = await instance.database;
+
+    final responseMessage = Message(
+      senderId: farmerId,
+      receiverId: buyerId,
+      text: responseText,
+      timestamp: DateTime.now(),
+      isPurchaseRequest: false,
+    );
+
+    return await db.insert('messages', responseMessage.toMap());
+  }
+
+  /// Get all responses to a specific purchase request
+  /// Returns messages sent by the farmer in response to the purchase request
+  Future<List<Message>> getPurchaseRequestResponses(int buyerId, int farmerId, DateTime purchaseRequestTime) async {
+    final db = await instance.database;
+
+    // Get all messages from farmer to buyer after the purchase request was sent
+    final maps = await db.query(
+      'messages',
+      where: 'senderId = ? AND receiverId = ? AND timestamp > ? AND isPurchaseRequest = 0',
+      whereArgs: [farmerId, buyerId, purchaseRequestTime.toIso8601String()],
+      orderBy: 'timestamp ASC',
+    );
+
+    return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
+  /// Check if a farmer has already responded to a purchase request from a specific buyer
+  Future<bool> hasRespondedToPurchaseRequest(int buyerId, int farmerId, DateTime purchaseRequestTime) async {
+    final responses = await getPurchaseRequestResponses(buyerId, farmerId, purchaseRequestTime);
+    return responses.isNotEmpty;
+  }
+
+  /// Get all unread purchase requests for a farmer
+  Future<List<Message>> getUnreadPurchaseRequestsForFarmer(int farmerId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'messages',
+      where: 'receiverId = ? AND isPurchaseRequest = 1 AND isRead = 0',
+      whereArgs: [farmerId],
+      orderBy: 'timestamp DESC',
+    );
+    return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
+  /// Mark a purchase request as read
+  Future<void> markPurchaseRequestAsRead(int messageId) async {
+    final db = await instance.database;
+    await db.update('messages', {'isRead': 1}, where: 'id = ? AND isPurchaseRequest = 1', whereArgs: [messageId]);
+  }
+
+  /// Get conversation history between buyer and farmer
+  /// This includes both regular messages and purchase requests
+  Future<List<Message>> getBuyerFarmerConversation(int buyerId, int farmerId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'messages',
+      where: '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)',
+      whereArgs: [buyerId, farmerId, farmerId, buyerId],
+      orderBy: 'timestamp ASC',
+    );
+    return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
+  /// Get all purchase requests from a specific buyer to a specific farmer
+  Future<List<Message>> getPurchaseRequestsBetween(int buyerId, int farmerId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'messages',
+      where: 'senderId = ? AND receiverId = ? AND isPurchaseRequest = 1',
+      whereArgs: [buyerId, farmerId],
+      orderBy: 'timestamp DESC',
+    );
+    return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
+  /// Get the count of unresponded purchase requests for a farmer
+  /// (those that don't have any follow-up messages from the farmer)
+  Future<int> getUnrespondedPurchaseRequestCount(int farmerId) async {
+    final db = await instance.database;
+
+    // Get all purchase requests for this farmer
+    final purchaseRequests = await db.rawQuery('''
+      SELECT DISTINCT senderId, MIN(id) as first_message_id
+      FROM messages
+      WHERE receiverId = ? AND isPurchaseRequest = 1
+      GROUP BY senderId
+    ''', [farmerId]);
+
+    int unrespondedCount = 0;
+
+    for (final pr in purchaseRequests) {
+      final buyerId = pr['senderId'];
+      final prTimestamp = await db.rawQuery('''
+        SELECT timestamp FROM messages WHERE id = ?
+      ''', [pr['first_message_id']]);
+
+      if (prTimestamp.isNotEmpty) {
+        final prTime = prTimestamp.first['timestamp'] as String;
+        final responses = await db.query(
+          'messages',
+          where: 'senderId = ? AND receiverId = ? AND timestamp > ? AND isPurchaseRequest = 0',
+          whereArgs: [farmerId, buyerId, prTime],
+        );
+
+        if (responses.isEmpty) {
+          unrespondedCount++;
+        }
+      }
+    }
+
+    return unrespondedCount;
   }
 }

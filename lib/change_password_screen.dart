@@ -14,12 +14,12 @@ class ChangePasswordScreen extends StatefulWidget {
 }
 
 class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
   final _formKey = GlobalKey<FormState>();
   final _newPassword = TextEditingController();
   final _confirm = TextEditingController();
   bool _saving = false;
-  bool _obscureNew = true;
-  bool _obscureConfirm = true;
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -58,8 +58,6 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              Text('Please choose a new password for ${widget.user.fullName}.'),
-              const SizedBox(height: 12),
               TextFormField(
                 controller: _newPassword,
                 decoration: InputDecoration(
@@ -70,12 +68,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   ),
                 ),
                 obscureText: _obscureNew,
-                validator: (v) => (v == null || v.length < 6) ? 'Password too short' : null,
+                validator: (v) => (v == null || v.isEmpty) ? 'Enter new password' : null,
               ),
+              const SizedBox(height: 12),
               TextFormField(
                 controller: _confirm,
                 decoration: InputDecoration(
-                  labelText: 'Confirm',
+                  labelText: 'Confirm password',
                   suffixIcon: IconButton(
                     icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
                     onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
@@ -87,7 +86,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _saving ? null : _save,
-                child: _saving ? const CompactLoader(size:18, strokeWidth:2.0, semanticsLabel: 'Saving') : const Text('Save'),
+                child: _saving ? const CompactLoader(size: 18, strokeWidth: 2.0, semanticsLabel: 'Saving') : const Text('Save'),
               ),
             ],
           ),

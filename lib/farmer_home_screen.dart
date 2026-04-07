@@ -17,6 +17,7 @@ import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/interested_buyers_screen.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
 import 'package:kaawa/review_notifications_screen.dart';
+import 'package:kaawa/purchase_requests_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class FarmerHomeScreen extends StatefulWidget {
@@ -39,6 +40,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   int _unreadMessageCount = 0;
   int _unreadReviewCount = 0;
   int _totalInterestedCount = 0;
+  int _purchaseRequestCount = 0;
   Timer? _refreshTimer;
   Map<int, List<User>> _interestedByStock = {};
   List<CoffeeStock> _farmerStocks = [];
@@ -103,7 +105,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     _animationController.forward();
     _loadTotalInterestCount();
     _loadInterestedOverview();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _loadInterestedOverview());
+    _getPurchaseRequestCount();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _loadInterestedOverview();
+      _getPurchaseRequestCount();
+    });
     _scheduleOnboardingGuides();
   }
 
@@ -181,6 +187,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     final count = await DatabaseHelper.instance.getUnreadReviewNotificationCount(widget.farmer.id!);
     if (!mounted) return;
     setState(() => _unreadReviewCount = count);
+  }
+
+  Future<void> _getPurchaseRequestCount() async {
+    final requests = await DatabaseHelper.instance.getPurchaseRequestsForFarmer(widget.farmer.id!);
+    if (!mounted) return;
+    setState(() {
+      _purchaseRequestCount = requests.length;
+    });
   }
 
   Future<List<User>> _getBuyers() async {
@@ -650,6 +664,49 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: _logout,
+            ),
+            // Purchase requests button (shows badge with count)
+            Stack(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.shopping_cart),
+                  tooltip: 'Purchase Requests',
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PurchaseRequestsScreen(farmer: _currentFarmer),
+                      ),
+                    );
+                    // refresh count after returning
+                    _getPurchaseRequestCount();
+                  },
+                ),
+                if (_purchaseRequestCount > 0)
+                  Positioned(
+                    right: 8,
+                    top: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.error,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: Text(
+                        '$_purchaseRequestCount',
+                        style: TextStyle(
+                          color: theme.colorScheme.onError,
+                          fontSize: 10,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             // Manage stock + interested buyers shortcut (shows badge with total interested buyers)
             IconButton(

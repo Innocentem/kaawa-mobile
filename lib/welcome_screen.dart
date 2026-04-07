@@ -116,6 +116,131 @@ class _InitialScreenState extends State<InitialScreen> {
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
+  void _showAboutDialog(BuildContext context, ThemeData theme) {
+    showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.info, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            const Text('About Kaawa'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Kaawa is a direct-to-consumer coffee marketplace that connects farmers with buyers.',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Key Features:',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              _buildFeatureItem(theme, Icons.agriculture, 'Farmers can list their coffee products'),
+              _buildFeatureItem(theme, Icons.shopping_cart, 'Buyers can browse and purchase coffee'),
+              _buildFeatureItem(theme, Icons.message, 'Direct messaging with farmers'),
+              _buildFeatureItem(theme, Icons.star, 'Rate and review sellers'),
+              _buildFeatureItem(theme, Icons.location_on, 'Distance-based search and filtering'),
+              const SizedBox(height: 16),
+              Text(
+                'How to Get Started:',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              _buildStepItem(theme, '1', 'Register as a Farmer or Buyer'),
+              _buildStepItem(theme, '2', 'Complete your profile'),
+              _buildStepItem(theme, '3', 'Farmers: Add your coffee listings'),
+              _buildStepItem(theme, '4', 'Buyers: Browse and add items to cart'),
+              _buildStepItem(theme, '5', 'Contact farmers directly to finalize purchases'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withAlpha((0.3 * 255).round()),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Questions or Support?',
+                      style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Use the "Contact Admin" option to reach out to us anytime.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(ThemeData theme, IconData icon, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: theme.colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: theme.textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepItem(ThemeData theme, String number, String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                number,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(text, style: theme.textTheme.bodySmall),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -292,18 +417,31 @@ class WelcomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            // Theme toggle top-right
+            // Theme toggle and About info top-right
             Positioned(
               right: 12,
               top: 12,
-              child: IconButton(
-                // show dark_mode / light_mode depending on current ThemeMode and let the surrounding theme determine color
-                icon: Icon(
-                  themeNotifier.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-                  color: IconTheme.of(context).color ?? theme.colorScheme.onBackground,
-                ),
-                onPressed: () => themeNotifier.toggleTheme(),
-                tooltip: 'Toggle theme',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    // show dark_mode / light_mode depending on current ThemeMode and let the surrounding theme determine color
+                    icon: Icon(
+                      themeNotifier.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
+                      color: IconTheme.of(context).color ?? theme.colorScheme.onBackground,
+                    ),
+                    onPressed: () => themeNotifier.toggleTheme(),
+                    tooltip: 'Toggle theme',
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.info_outline,
+                      color: IconTheme.of(context).color ?? theme.colorScheme.onBackground,
+                    ),
+                    onPressed: () => _showAboutDialog(context, theme),
+                    tooltip: 'About Kaawa',
+                  ),
+                ],
               ),
             ),
           ],
