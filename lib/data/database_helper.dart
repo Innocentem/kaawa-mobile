@@ -1,1013 +1,391 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/message_data.dart';
-import 'package:kaawa/data/review_data.dart';
-import 'package:kaawa/data/coffee_stock_data.dart';
-import 'package:kaawa/data/conversation_data.dart';
+import 'user_data.dart' as kaawa;
+import 'coffee_stock_data.dart';
+import 'message_data.dart';
+import 'cart_item.dart';
+import 'review_data.dart';
+import 'package:kaawa/utils/date_utils.dart';
 
 class DatabaseHelper {
-  static final DatabaseHelper instance = DatabaseHelper._privateConstructor();
+  static final DatabaseHelper instance = DatabaseHelper._init();
   static Database? _database;
 
-  DatabaseHelper._privateConstructor();
+  DatabaseHelper._init();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDatabase();
+    _database = await _initDB('kaawa.db');
     return _database!;
   }
 
-  Future<Database> _initDatabase() async {
+  Future<Database> _initDB(String filePath) async {
     final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'kaawa_database.db');
-    // bump DB version to 28: add purchase request fields to messages table
-    return await openDatabase(path, version: 28, onCreate: _createDb, onUpgrade: _onUpgrade);
+    final path = join(dbPath, filePath);
+
+    return await openDatabase(
+      path,
+      version: 27,
+      onCreate: _createDB,
+      onUpgrade: _upgradeDB,
+    );
   }
 
-  Future<void> _createDb(Database db, int version) async {
+  Future _createDB(Database db, int version) async {
     await db.execute('''
-      CREATE TABLE users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fullName TEXT NOT NULL,
-        phoneNumber TEXT NOT NULL UNIQUE,
-        district TEXT NOT NULL,
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phoneNumber TEXT NOT NULL,
         password TEXT NOT NULL,
         userType TEXT NOT NULL,
-        profilePicturePath TEXT,
-        latitude REAL,
-        longitude REAL,
-        village TEXT,
-        mustChangePassword INTEGER NOT NULL DEFAULT 0,
-        suspendedUntil TEXT
-        ,suspensionReason TEXT
-        -- xp and badgesCount removed intentionally
+        location TEXT,
+        profilePicture TEXT,
+        mustChangePassword INTEGER DEFAULT 0,
+        suspendedUntil TEXT,
+        suspensionReason TEXT
       )
     ''');
-    await _createMessagesTable(db);
-    await _createReviewsTable(db);
-    await _createReviewNotificationsTable(db);
-    await _createFavoritesTable(db);
-    await _createCoffeeStockTable(db);
-    await _createInterestedBuyersTable(db);
-    // password_resets table allows users to request admin help resetting passwords
-    await db.execute('''
-      CREATE TABLE password_resets(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phoneNumber TEXT NOT NULL,
-        requestedAt TEXT NOT NULL,
-        handled INTEGER NOT NULL DEFAULT 0,
-        handledAt TEXT,
-        handledByAdmin TEXT
-      )
-    ''');
-  }
 
-  Future<void> _createMessagesTable(Database db) async {
     await db.execute('''
-      CREATE TABLE messages(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        senderId INTEGER NOT NULL,
-        receiverId INTEGER NOT NULL,
-        text TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        isRead INTEGER NOT NULL DEFAULT 0,
-        coffeeStockId INTEGER,
-        isPurchaseRequest INTEGER NOT NULL DEFAULT 0,
-        purchaseRequestData TEXT
-      )
-    ''');
-  }
-
-  Future<void> _createReviewsTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE reviews(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        reviewerId INTEGER NOT NULL,
-        reviewedUserId INTEGER NOT NULL,
-        rating REAL NOT NULL,
-        reviewText TEXT NOT NULL
-      )
-    ''');
-    await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reviews_unique_reviewer_reviewed ON reviews(reviewerId, reviewedUserId)');
-  }
-
-  Future<void> _createReviewNotificationsTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE review_notifications(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        reviewedUserId INTEGER NOT NULL,
-        reviewerId INTEGER NOT NULL,
-        reviewId INTEGER NOT NULL,
-        createdAt TEXT NOT NULL,
-        isRead INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
-  }
-
-  Future<void> _createFavoritesTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE favorites(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        userId INTEGER NOT NULL,
-        favoriteUserId INTEGER NOT NULL
-      )
-    ''');
-  }
-
-  Future<void> _createCoffeeStockTable(Database db) async {
-    await db.execute('''
-      CREATE TABLE coffee_stock(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        farmerId INTEGER NOT NULL,
-        coffeeType TEXT NOT NULL,
+      CREATE TABLE coffee_stock (
+        id TEXT PRIMARY KEY,
+        farmer_id TEXT NOT NULL,
+        coffee_type TEXT NOT NULL,
         quantity REAL NOT NULL,
-        pricePerKg REAL NOT NULL,
-        coffeePicturePath TEXT,
-        description TEXT DEFAULT '',
-        isSold INTEGER NOT NULL DEFAULT 0
+        price_per_kg REAL NOT NULL,
+        coffee_picture_url TEXT,
+        description TEXT,
+        is_sold INTEGER DEFAULT 0,
+        FOREIGN KEY (farmer_id) REFERENCES users (id) ON DELETE CASCADE
       )
     ''');
-  }
 
-  Future<void> _createInterestedBuyersTable(Database db) async {
     await db.execute('''
-      CREATE TABLE interested_buyers(
+      CREATE TABLE messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        coffeeStockId INTEGER NOT NULL,
-        buyerId INTEGER NOT NULL,
+        sender_id TEXT NOT NULL,
+        receiver_id TEXT NOT NULL,
+        text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        is_read INTEGER DEFAULT 0,
+        is_purchase_request INTEGER DEFAULT 0,
+        coffee_stock_id TEXT,
+        purchase_request_data TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE cart_items (
+        id TEXT PRIMARY KEY,
+        buyerId TEXT NOT NULL,
+        coffeeStockId TEXT NOT NULL,
+        quantity REAL NOT NULL,
         timestamp TEXT NOT NULL,
-        seenByFarmer INTEGER NOT NULL DEFAULT 0,
-        UNIQUE(coffeeStockId, buyerId)
+        FOREIGN KEY (buyerId) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (coffeeStockId) REFERENCES coffee_stock (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        reviewerId TEXT NOT NULL,
+        reviewedUserId TEXT NOT NULL,
+        rating REAL NOT NULL,
+        comment TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        FOREIGN KEY (reviewerId) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewedUserId) REFERENCES users (id) ON DELETE CASCADE
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE admin_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        adminId TEXT NOT NULL,
+        action TEXT NOT NULL,
+        targetType TEXT NOT NULL,
+        targetId TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        details TEXT
       )
     ''');
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 13) {
-      await db.execute('CREATE TABLE users_temp AS SELECT id, fullName, phoneNumber, district, password, userType, profilePicturePath, latitude, longitude, village FROM users');
-      await db.execute('DROP TABLE users');
-      await db.execute('ALTER TABLE users_temp RENAME TO users');
-    }
-    if (oldVersion < 14) {
-      await db.execute('ALTER TABLE coffee_stock ADD COLUMN coffeePicturePath TEXT');
-    }
-    if (oldVersion < 15) {
-      await db.execute('ALTER TABLE coffee_stock ADD COLUMN isSold INTEGER NOT NULL DEFAULT 0');
-    }
-    if (oldVersion < 16) {
-      await db.execute('ALTER TABLE messages ADD COLUMN isRead INTEGER NOT NULL DEFAULT 0');
-    }
-    if (oldVersion < 17) {
-      await db.execute('ALTER TABLE messages ADD COLUMN coffeeStockId INTEGER');
-    }
-    if (oldVersion < 18) {
-      await _createInterestedBuyersTable(db);
-    }
-    if (oldVersion < 19) {
-      // add seenByFarmer flag to track whether farmer has viewed the interested buyers for a stock
-      await db.execute('ALTER TABLE interested_buyers ADD COLUMN seenByFarmer INTEGER NOT NULL DEFAULT 0');
-    }
-    if (oldVersion < 20) {
-      // add description column to coffee_stock
-      await db.execute("ALTER TABLE coffee_stock ADD COLUMN description TEXT DEFAULT ''");
-    }
-    // Migration to remove xp and badgesCount from users (safe migration)
-    if (oldVersion < 22) {
-      try {
-        // Copy only the desired columns into a temp table, drop original, rename back
-        await db.execute('CREATE TABLE users_temp AS SELECT id, fullName, phoneNumber, district, password, userType, profilePicturePath, latitude, longitude, village FROM users');
-        await db.execute('DROP TABLE users');
-        await db.execute('ALTER TABLE users_temp RENAME TO users');
-      } catch (e) {
-        // if anything goes wrong, ignore to preserve backward compatibility
-      }
-    }
-    if (oldVersion < 23) {
-      // create password_resets table introduced in version 23
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS password_resets(
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          phoneNumber TEXT NOT NULL,
-          requestedAt TEXT NOT NULL,
-          handled INTEGER NOT NULL DEFAULT 0,
-          handledAt TEXT,
-          handledByAdmin TEXT
-        )
-      ''');
-    }
-    if (oldVersion < 24) {
-      try {
-        await db.execute('ALTER TABLE users ADD COLUMN mustChangePassword INTEGER NOT NULL DEFAULT 0');
-      } catch (e) {
-        // ignore if column already exists or DB doesn't support alter
-      }
-    }
-    if (oldVersion < 25) {
-      try {
-        await db.execute('ALTER TABLE users ADD COLUMN suspendedUntil TEXT');
-        await db.execute('ALTER TABLE users ADD COLUMN suspensionReason TEXT');
-      } catch (e) {
-        // ignore if column exists
-      }
-    }
-    if (oldVersion < 26) {
-      await _createReviewNotificationsTable(db);
-    }
+  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 27) {
-      await db.execute('CREATE UNIQUE INDEX IF NOT EXISTS reviews_unique_reviewer_reviewed ON reviews(reviewerId, reviewedUserId)');
-    }
-    if (oldVersion < 28) {
-      try {
-        await db.execute('ALTER TABLE messages ADD COLUMN isPurchaseRequest INTEGER NOT NULL DEFAULT 0');
-        await db.execute('ALTER TABLE messages ADD COLUMN purchaseRequestData TEXT');
-      } catch (e) {
-        // ignore if columns already exist
-      }
+      await db.execute('DROP TABLE IF EXISTS users');
+      await db.execute('DROP TABLE IF EXISTS coffee_stock');
+      await db.execute('DROP TABLE IF EXISTS messages');
+      await db.execute('DROP TABLE IF EXISTS cart_items');
+      await db.execute('DROP TABLE IF EXISTS reviews');
+      await db.execute('DROP TABLE IF EXISTS admin_logs');
+      await _createDB(db, newVersion);
     }
   }
 
-  /// Returns a polling stream of the user's activity summary.
-  Stream<Map<String, dynamic>> getUserActivityStream(int userId, {Duration interval = const Duration(seconds: 2)}) {
-    return Stream.periodic(interval).asyncMap((_) => getUserActivitySummary(userId)).asBroadcastStream();
-  }
-
-  /// Returns a combined, sorted activity log for the user.
-  Future<List<Map<String, dynamic>>> getUserActivityLog(int userId) async {
+  // User methods
+  Future<int> insertUser(kaawa.User user) async {
     final db = await instance.database;
-    final List<Map<String, dynamic>> items = [];
-
-    // messages involving user
-    final msgMaps = await db.query('messages', where: 'senderId = ? OR receiverId = ?', whereArgs: [userId, userId], orderBy: 'timestamp DESC');
-    for (final m in msgMaps) {
-      items.add({
-        'type': 'message',
-        'senderId': m['senderId'],
-        'receiverId': m['receiverId'],
-        'text': m['text'],
-        'timestamp': m['timestamp'],
-        'coffeeStockId': m['coffeeStockId'],
-      });
-    }
-
-    // interests where user is buyer
-    final interestBuyerMaps = await db.query('interested_buyers', where: 'buyerId = ?', whereArgs: [userId], orderBy: 'timestamp DESC');
-    for (final ib in interestBuyerMaps) {
-      items.add({
-        'type': 'interest',
-        'buyerId': ib['buyerId'],
-        'coffeeStockId': ib['coffeeStockId'],
-        'timestamp': ib['timestamp'],
-      });
-    }
-
-    // interests where user is farmer (i.e., buyers interested in this farmer's stock)
-    final interestFarmerMaps = await db.rawQuery('SELECT ib.* FROM interested_buyers ib INNER JOIN coffee_stock cs ON cs.id = ib.coffeeStockId WHERE cs.farmerId = ? ORDER BY ib.timestamp DESC', [userId]);
-    for (final ib in interestFarmerMaps) {
-      items.add({
-        'type': 'interest_for_farmer',
-        'buyerId': ib['buyerId'],
-        'coffeeStockId': ib['coffeeStockId'],
-        'timestamp': ib['timestamp'],
-      });
-    }
-
-    // sort by timestamp desc when possible
-    items.sort((a, b) {
-      final ta = a['timestamp'] as String?;
-      final tb = b['timestamp'] as String?;
-      if (ta == null && tb == null) return 0;
-      if (ta == null) return 1;
-      if (tb == null) return -1;
-      return DateTime.parse(tb).compareTo(DateTime.parse(ta));
-    });
-
-    return items;
+    return await db.insert('users', user.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  Future<int> insertUser(User user) async {
+  Future<kaawa.User?> getUser(String id) async {
     final db = await instance.database;
-    return await db.insert('users', user.toMap());
-  }
-
-  Future<User?> getUser(String phoneNumber) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'users',
-      where: 'phoneNumber = ?',
-      whereArgs: [phoneNumber],
-    );
-
+    final maps = await db.query('users', where: 'id = ?', whereArgs: [id]);
     if (maps.isNotEmpty) {
-      return User.fromMap(maps.first);
-    } else {
-      return null;
+      return kaawa.User.fromMap(maps.first);
     }
+    return null;
   }
 
-  Future<User?> getUserById(int id) async {
+  Future<kaawa.User?> getUserByPhone(String phoneNumber) async {
     final db = await instance.database;
-    final maps = await db.query(
-      'users',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
+    final maps = await db.query('users', where: 'phoneNumber = ?', whereArgs: [phoneNumber]);
     if (maps.isNotEmpty) {
-      return User.fromMap(maps.first);
-    } else {
-      return null;
+      return kaawa.User.fromMap(maps.first);
     }
+    return null;
   }
 
-  Future<List<User>> getAllUsers() async {
+  Future<int> updateUser(kaawa.User user) async {
     final db = await instance.database;
-    final maps = await db.query('users');
-    return maps.map((map) => User.fromMap(map)).toList();
+    return await db.update('users', user.toMap(), where: 'id = ?', whereArgs: [user.id]);
   }
 
-  Future<List<User>> getAdmins() async {
+  Future<List<kaawa.User>> getAdmins() async {
     final db = await instance.database;
-    final maps = await db.query(
-      'users',
-      where: 'userType = ?',
-      whereArgs: [UserType.admin.toString()],
-      orderBy: 'fullName COLLATE NOCASE',
-    );
-    return maps.map((map) => User.fromMap(map)).toList();
+    final maps = await db.query('users', where: 'userType = ?', whereArgs: ['admin']);
+    return maps.map((map) => kaawa.User.fromMap(map)).toList();
   }
 
-  Future<User?> getFirstAdmin() async {
-    final admins = await getAdmins();
-    return admins.isEmpty ? null : admins.first;
-  }
-
-  /// Returns a summary of user activity: listingsCount (if farmer), interestsCount (as buyer),
-  /// conversationsCount (distinct other users messaged) and earliest activity ISO timestamp (nullable).
-  Future<Map<String, dynamic>> getUserActivitySummary(int userId) async {
-    final db = await instance.database;
-
-    // listingsCount for farmer
-    final listingsResult = await db.rawQuery('SELECT COUNT(*) as c FROM coffee_stock WHERE farmerId = ?', [userId]);
-    final listingsCount = Sqflite.firstIntValue(listingsResult) ?? 0;
-
-    // interestsCount as buyer
-    final interestsResult = await db.rawQuery('SELECT COUNT(*) as c FROM interested_buyers WHERE buyerId = ?', [userId]);
-    final interestsCount = Sqflite.firstIntValue(interestsResult) ?? 0;
-
-    // conversationsCount: distinct other user ids in messages
-    final convResult = await db.rawQuery('''
-      SELECT COUNT(DISTINCT CASE WHEN senderId = ? THEN receiverId ELSE senderId END) as c
-      FROM messages
-      WHERE senderId = ? OR receiverId = ?
-    ''', [userId, userId, userId]);
-    final conversationsCount = Sqflite.firstIntValue(convResult) ?? 0;
-
-    // earliest activity timestamp from messages and interested_buyers (if any)
-    String? earliestIso;
-    final msgResult = await db.rawQuery('SELECT MIN(timestamp) as m FROM messages WHERE senderId = ? OR receiverId = ?', [userId, userId]);
-    final earliestMsg = msgResult.isNotEmpty ? msgResult.first['m'] as String? : null;
-    final interestResult = await db.rawQuery('SELECT MIN(timestamp) as m FROM interested_buyers WHERE buyerId = ?', [userId]);
-    final earliestInterest = interestResult.isNotEmpty ? interestResult.first['m'] as String? : null;
-
-    if (earliestMsg != null && earliestInterest != null) {
-      earliestIso = DateTime.parse(earliestMsg).isBefore(DateTime.parse(earliestInterest)) ? earliestMsg : earliestInterest;
-    } else if (earliestMsg != null) {
-      earliestIso = earliestMsg;
-    } else if (earliestInterest != null) {
-      earliestIso = earliestInterest;
-    }
-
-    return {
-      'listingsCount': listingsCount,
-      'interestsCount': interestsCount,
-      'conversationsCount': conversationsCount,
-      'earliestActivityIso': earliestIso,
-    };
-  }
-
-  Future<int> updateUser(User user) async {
-    final db = await instance.database;
-    return await db.update(
-      'users',
-      user.toMap(),
-      where: 'id = ?',
-      whereArgs: [user.id],
-    );
-  }
-
-  Future<int> insertMessage(Message message) async {
-    final db = await instance.database;
-    return await db.insert('messages', message.toMap());
-  }
-
-  Future<List<Message>> getMessages(int userId1, int userId2) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'messages',
-      where: '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)',
-      whereArgs: [userId1, userId2, userId2, userId1],
-      orderBy: 'timestamp ASC',
-    );
-    return maps.map((map) => Message.fromMap(map)).toList();
-  }
-
-  Future<void> markMessagesAsRead(int receiverId, int senderId) async {
-    final db = await instance.database;
-    await db.update(
-      'messages',
-      {'isRead': 1},
-      where: 'receiverId = ? AND senderId = ?',
-      whereArgs: [receiverId, senderId],
-    );
-  }
-
-  Future<int> getUnreadMessageCount(int receiverId) async {
-    final db = await instance.database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) FROM messages WHERE receiverId = ? AND isRead = 0',
-      [receiverId],
-    );
-    return Sqflite.firstIntValue(result) ?? 0;
-  }
-
-  /// Get all purchase requests received by a farmer (receiverId = farmer)
-  Future<List<Message>> getPurchaseRequestsForFarmer(int farmerId) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'messages',
-      where: 'receiverId = ? AND isPurchaseRequest = 1',
-      whereArgs: [farmerId],
-      orderBy: 'timestamp DESC',
-    );
-    return maps.map((map) => Message.fromMap(map)).toList();
-  }
-
-  Future<int> getUnreadReviewNotificationCount(int reviewedUserId) async {
-    final db = await instance.database;
-    final rows = await db.rawQuery(
-      'SELECT COUNT(*) as c FROM review_notifications WHERE reviewedUserId = ? AND isRead = 0',
-      [reviewedUserId],
-    );
-    final countRaw = rows.isNotEmpty ? rows.first['c'] : 0;
-    return countRaw is num ? countRaw.toInt() : int.tryParse(countRaw?.toString() ?? '') ?? 0;
-  }
-
-  Future<List<Map<String, dynamic>>> getReviewNotifications(int reviewedUserId) async {
-    final db = await instance.database;
-    final rows = await db.rawQuery('''
-      SELECT
-        n.id as notification_id,
-        n.isRead as notification_isRead,
-        n.createdAt as notification_createdAt,
-        r.id as review_id,
-        r.reviewerId as reviewerId,
-        r.reviewedUserId as reviewedUserId,
-        r.rating as rating,
-        r.reviewText as reviewText,
-        u.id as reviewer_id,
-        u.fullName as reviewer_fullName,
-        u.phoneNumber as reviewer_phoneNumber,
-        u.district as reviewer_district,
-        u.password as reviewer_password,
-        u.userType as reviewer_userType,
-        u.profilePicturePath as reviewer_profilePicturePath,
-        u.latitude as reviewer_latitude,
-        u.longitude as reviewer_longitude,
-        u.village as reviewer_village
-      FROM review_notifications n
-      INNER JOIN reviews r ON n.reviewId = r.id
-      LEFT JOIN users u ON r.reviewerId = u.id
-      WHERE n.reviewedUserId = ?
-      ORDER BY n.createdAt DESC
-    ''', [reviewedUserId]);
-
-    final List<Map<String, dynamic>> result = [];
-    for (final row in rows) {
-      final notification = {
-        'id': row['notification_id'],
-        'isRead': row['notification_isRead'],
-        'createdAt': row['notification_createdAt'],
-      };
-      final review = {
-        'id': row['review_id'],
-        'reviewerId': row['reviewerId'],
-        'reviewedUserId': row['reviewedUserId'],
-        'rating': row['rating'],
-        'reviewText': row['reviewText'],
-      };
-
-      User? reviewer;
-      if (row['reviewer_id'] != null) {
-        reviewer = User(
-          id: row['reviewer_id'] as int?,
-          fullName: row['reviewer_fullName']?.toString() ?? '',
-          phoneNumber: row['reviewer_phoneNumber']?.toString() ?? '',
-          district: row['reviewer_district']?.toString() ?? '',
-          password: row['reviewer_password']?.toString() ?? '',
-          userType: (row['reviewer_userType'] != null && row['reviewer_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
-          profilePicturePath: row['reviewer_profilePicturePath']?.toString(),
-          latitude: row['reviewer_latitude'] is num ? (row['reviewer_latitude'] as num).toDouble() : null,
-          longitude: row['reviewer_longitude'] is num ? (row['reviewer_longitude'] as num).toDouble() : null,
-          village: row['reviewer_village']?.toString(),
-        );
-      }
-
-      result.add({'notification': notification, 'review': review, 'reviewer': reviewer});
-    }
-
-    return result;
-  }
-
-  Future<void> markAllReviewNotificationsRead(int reviewedUserId) async {
-    final db = await instance.database;
-    await db.update('review_notifications', {'isRead': 1}, where: 'reviewedUserId = ?', whereArgs: [reviewedUserId]);
-  }
-
-  Future<void> markReviewNotificationRead(int notificationId) async {
-    final db = await instance.database;
-    await db.update('review_notifications', {'isRead': 1}, where: 'id = ?', whereArgs: [notificationId]);
-  }
-
-  Future<void> addFavorite(int userId, int favoriteUserId) async {
-    final db = await instance.database;
-    await db.insert('favorites', {'userId': userId, 'favoriteUserId': favoriteUserId});
-  }
-
-  Future<void> removeFavorite(int userId, int favoriteUserId) async {
-    final db = await instance.database;
-    await db.delete('favorites', where: 'userId = ? AND favoriteUserId = ?', whereArgs: [userId, favoriteUserId]);
-  }
-
-  Future<List<User>> getFavorites(int userId) async {
-    final db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.query('favorites', where: 'userId = ?', whereArgs: [userId]);
-    if (maps.isEmpty) {
-      return [];
-    }
-
-    List<int> favoriteIds = maps.map((map) => map['favoriteUserId'] as int).toList();
-    final userMaps = await db.query('users', where: 'id IN (?)', whereArgs: [favoriteIds]);
-
-    return userMaps.map((map) => User.fromMap(map)).toList();
-  }
-
-  Future<bool> isFavorite(int userId, int favoriteUserId) async {
-    final db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.query('favorites', where: 'userId = ? AND favoriteUserId = ?', whereArgs: [userId, favoriteUserId]);
-    return maps.isNotEmpty;
-  }
-
+  // Coffee Stock methods
   Future<int> insertCoffeeStock(CoffeeStock stock) async {
     final db = await instance.database;
-    return await db.insert('coffee_stock', stock.toMap());
-  }
-
-  Future<int> updateCoffeeStock(CoffeeStock stock) async {
-    final db = await instance.database;
-    return await db.update(
-      'coffee_stock',
-      stock.toMap(),
-      where: 'id = ?',
-      whereArgs: [stock.id],
-    );
-  }
-
-  Future<CoffeeStock?> getCoffeeStockById(int id) async {
-    final db = await instance.database;
-    final maps = await db.query(
-      'coffee_stock',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-
-    if (maps.isNotEmpty) {
-      return CoffeeStock.fromMap(maps.first);
-    } else {
-      return null;
-    }
-  }
-
-  Future<List<CoffeeStock>> getCoffeeStock(int farmerId) async {
-    final db = await instance.database;
-    final maps = await db.query('coffee_stock', where: 'farmerId = ?', whereArgs: [farmerId]);
-    return maps.map((map) => CoffeeStock.fromMap(map)).toList();
+    final map = stock.toMap();
+    map['is_sold'] = stock.isSold ? 1 : 0;
+    return await db.insert('coffee_stock', map, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<CoffeeStock>> getAllCoffeeStock() async {
     final db = await instance.database;
-    final maps = await db.query('coffee_stock', orderBy: 'isSold ASC, id DESC');
+    final maps = await db.query('coffee_stock');
     return maps.map((map) => CoffeeStock.fromMap(map)).toList();
   }
 
-  /// Returns the total number of interested buyers across all active (isSold = 0) stocks for the given farmer.
-  Future<int> getTotalInterestCountForFarmer(int farmerId) async {
+  Future<List<CoffeeStock>> getFarmerCoffeeStock(String farmerId) async {
     final db = await instance.database;
-    final result = await db.rawQuery('''
-      SELECT COUNT(ib.id) FROM interested_buyers ib
-      INNER JOIN coffee_stock cs ON cs.id = ib.coffeeStockId
-      WHERE cs.farmerId = ? AND cs.isSold = 0 AND ib.seenByFarmer = 0
-    ''', [farmerId]);
-    return Sqflite.firstIntValue(result) ?? 0;
+    final maps = await db.query('coffee_stock', where: 'farmer_id = ?', whereArgs: [farmerId]);
+    return maps.map((map) => CoffeeStock.fromMap(map)).toList();
   }
 
-  // Interested buyers helpers
-  Future<void> addInterest(int coffeeStockId, int buyerId) async {
+  Future<int> updateCoffeeStock(CoffeeStock stock) async {
     final db = await instance.database;
-    await db.insert('interested_buyers', {
-      'coffeeStockId': coffeeStockId,
-      'buyerId': buyerId,
-      'timestamp': DateTime.now().toIso8601String(),
-    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    final map = stock.toMap();
+    map['is_sold'] = stock.isSold ? 1 : 0;
+    return await db.update('coffee_stock', map, where: 'id = ?', whereArgs: [stock.id]);
   }
 
-  Future<void> removeInterest(int coffeeStockId, int buyerId) async {
+  Future<int> deleteCoffeeStock(String id) async {
     final db = await instance.database;
-    await db.delete('interested_buyers', where: 'coffeeStockId = ? AND buyerId = ?', whereArgs: [coffeeStockId, buyerId]);
+    return await db.delete('coffee_stock', where: 'id = ?', whereArgs: [id]);
   }
 
-  Future<bool> isInterested(int coffeeStockId, int buyerId) async {
+  // Message methods
+  Future<int> insertMessage(Message message) async {
     final db = await instance.database;
-    final maps = await db.query('interested_buyers', where: 'coffeeStockId = ? AND buyerId = ?', whereArgs: [coffeeStockId, buyerId]);
-    return maps.isNotEmpty;
+    final map = message.toMap();
+    map['is_read'] = message.isRead ? 1 : 0;
+    map['is_purchase_request'] = message.isPurchaseRequest ? 1 : 0;
+    return await db.insert('messages', map);
   }
 
-  Future<int> getInterestCountForStock(int coffeeStockId) async {
-    final db = await instance.database;
-    final result = await db.rawQuery('SELECT COUNT(*) FROM interested_buyers WHERE coffeeStockId = ?', [coffeeStockId]);
-    return Sqflite.firstIntValue(result) ?? 0;
-  }
-
-  Future<List<User>> getInterestedBuyersForStock(int coffeeStockId) async {
-    final db = await instance.database;
-    final maps = await db.rawQuery('''
-      SELECT u.* FROM users u
-      INNER JOIN interested_buyers ib ON u.id = ib.buyerId
-      WHERE ib.coffeeStockId = ?
-    ''', [coffeeStockId]);
-    return maps.map((map) => User.fromMap(map)).toList();
-  }
-
-  /// Marks all interests for a given stock as seen by the farmer.
-  Future<void> markInterestsAsSeenForStock(int coffeeStockId) async {
-    final db = await instance.database;
-    await db.update('interested_buyers', {'seenByFarmer': 1}, where: 'coffeeStockId = ?', whereArgs: [coffeeStockId]);
-  }
-
-  /// Returns a list of coffeeStock IDs that the given buyer has expressed interest in.
-  Future<List<int>> getInterestedStockIdsForBuyer(int buyerId) async {
-    final db = await instance.database;
-    final maps = await db.query('interested_buyers', columns: ['coffeeStockId'], where: 'buyerId = ?', whereArgs: [buyerId]);
-    return maps.map((m) => m['coffeeStockId'] as int).toList();
-  }
-
-  /// Fetch reviews for a reviewed user together with reviewer user info using a single JOIN.
-  /// Returns a list where each element is a Map with keys: 'review' (Review) and 'reviewer' (User?).
-  Future<List<Map<String, dynamic>>> getReviewsWithReviewers(int reviewedUserId) async {
-    final db = await instance.database;
-    final rows = await db.rawQuery('''
-      SELECT
-        r.id as review_id,
-        r.reviewerId as reviewerId,
-        r.reviewedUserId as reviewedUserId,
-        r.rating as rating,
-        r.reviewText as reviewText,
-        u.id as reviewer_id,
-        u.fullName as reviewer_fullName,
-        u.phoneNumber as reviewer_phoneNumber,
-        u.district as reviewer_district,
-        u.password as reviewer_password,
-        u.userType as reviewer_userType,
-        u.profilePicturePath as reviewer_profilePicturePath,
-        u.latitude as reviewer_latitude,
-        u.longitude as reviewer_longitude,
-        u.village as reviewer_village
-      FROM reviews r
-      LEFT JOIN users u ON r.reviewerId = u.id
-      WHERE r.reviewedUserId = ?
-      ORDER BY r.id DESC
-    ''', [reviewedUserId]);
-
-    final List<Map<String, dynamic>> result = [];
-    for (final row in rows) {
-      final review = {
-        'id': row['review_id'],
-        'reviewerId': row['reviewerId'],
-        'reviewedUserId': row['reviewedUserId'],
-        'rating': row['rating'],
-        'reviewText': row['reviewText'],
-      };
-
-      User? reviewer;
-      if (row['reviewer_id'] != null) {
-        reviewer = User(
-          id: row['reviewer_id'] as int?,
-          fullName: row['reviewer_fullName']?.toString() ?? '',
-          phoneNumber: row['reviewer_phoneNumber']?.toString() ?? '',
-          district: row['reviewer_district']?.toString() ?? '',
-          password: row['reviewer_password']?.toString() ?? '',
-          userType: (row['reviewer_userType'] != null && row['reviewer_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
-          profilePicturePath: row['reviewer_profilePicturePath']?.toString(),
-          latitude: row['reviewer_latitude'] is num ? (row['reviewer_latitude'] as num).toDouble() : null,
-          longitude: row['reviewer_longitude'] is num ? (row['reviewer_longitude'] as num).toDouble() : null,
-          village: row['reviewer_village']?.toString(),
-        );
-      }
-
-      result.add({'review': review, 'reviewer': reviewer});
-    }
-
-    return result;
-  }
-
-  /// Password reset request helpers (admin-handled)
-  Future<int> insertPasswordResetRequest(String phoneNumber) async {
-    final db = await instance.database;
-    return await db.insert('password_resets', {
-      'phoneNumber': phoneNumber,
-      'requestedAt': DateTime.now().toIso8601String(),
-      'handled': 0,
-    });
-  }
-
-  Future<List<Map<String, dynamic>>> getPendingPasswordResetRequests() async {
-    final db = await instance.database;
-    final maps = await db.query('password_resets', where: 'handled = 0', orderBy: 'requestedAt DESC');
-    return maps;
-  }
-
-  Future<void> markPasswordResetHandled(int id, {String? adminName}) async {
-    final db = await instance.database;
-    await db.update('password_resets', {
-      'handled': 1,
-      'handledAt': DateTime.now().toIso8601String(),
-      'handledByAdmin': adminName ?? 'admin',
-    }, where: 'id = ?', whereArgs: [id]);
-  }
-
-  /// Helper to let admin set a user's password by phone number. Returns true if a user was updated.
-  Future<bool> adminSetUserPasswordByPhone(String phoneNumber, String newPasswordHash) async {
-    final db = await instance.database;
-    final res = await db.update(
-      'users',
-      {'password': newPasswordHash, 'mustChangePassword': 1},
-      where: 'phoneNumber = ?',
-      whereArgs: [phoneNumber],
-    );
-    return res > 0;
-  }
-
-  /// Helper to let admin set a user's password by id and require change on next login.
-  Future<bool> adminSetUserPasswordById(int userId, String newPasswordHash) async {
-    final db = await instance.database;
-    final res = await db.update(
-      'users',
-      {'password': newPasswordHash, 'mustChangePassword': 1},
-      where: 'id = ?',
-      whereArgs: [userId],
-    );
-    return res > 0;
-  }
-
-  Future<void> _ensureUserSuspensionColumns(Database db) async {
-    final columns = await db.rawQuery("PRAGMA table_info('users')");
-    final names = columns.map((c) => c['name']?.toString()).toSet();
-    if (!names.contains('suspendedUntil')) {
-      await db.execute('ALTER TABLE users ADD COLUMN suspendedUntil TEXT');
-    }
-    if (!names.contains('suspensionReason')) {
-      await db.execute('ALTER TABLE users ADD COLUMN suspensionReason TEXT');
-    }
-  }
-
-  // Admin helpers: suspend/unsuspend users
-  Future<void> suspendUser(int userId, DateTime until) async {
-    final db = await instance.database;
-    await _ensureUserSuspensionColumns(db);
-    await db.update('users', {'suspendedUntil': until.toIso8601String()}, where: 'id = ?', whereArgs: [userId]);
-  }
-
-  Future<void> unsuspendUser(int userId) async {
-    final db = await instance.database;
-    await _ensureUserSuspensionColumns(db);
-    await db.update('users', {'suspendedUntil': null, 'suspensionReason': null}, where: 'id = ?', whereArgs: [userId]);
-  }
-
-  Future<void> suspendUserWithReason(int userId, DateTime until, String? reason) async {
-    final db = await instance.database;
-    await _ensureUserSuspensionColumns(db);
-    await db.update('users', {'suspendedUntil': until.toIso8601String(), 'suspensionReason': reason}, where: 'id = ?', whereArgs: [userId]);
-  }
-
-  Future<List<User>> getAllUsersWithStatus() async {
-    final db = await instance.database;
-    final maps = await db.query('users', orderBy: 'fullName COLLATE NOCASE');
-    return maps.map((m) => User.fromMap(m)).toList();
-  }
-
-  /// Get conversations for a user with the latest message and coffee stock info
-  Future<List<Conversation>> getConversations(int userId) async {
-    final db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.rawQuery('''
-      SELECT
-        m.id,
-        m.senderId,
-        m.receiverId,
-        m.text,
-        m.timestamp,
-        m.isRead,
-        m.coffeeStockId,
-        u.id as other_user_id,
-        u.fullName as other_user_fullName,
-        u.phoneNumber as other_user_phoneNumber,
-        u.district as other_user_district,
-        u.password as other_user_password,
-        u.userType as other_user_userType,
-        u.profilePicturePath as other_user_profilePicturePath,
-        u.latitude as other_user_latitude,
-        u.longitude as other_user_longitude,
-        u.village as other_user_village,
-        cs.id as stock_id,
-        cs.farmerId as stock_farmerId,
-        cs.coffeeType as stock_coffeeType,
-        cs.quantity as stock_quantity,
-        cs.pricePerKg as stock_pricePerKg,
-        cs.coffeePicturePath as stock_coffeePicturePath,
-        cs.description as stock_description,
-        cs.isSold as stock_isSold
-      FROM (
-        SELECT * FROM messages
-        WHERE (senderId = ? OR receiverId = ?)
-        ORDER BY timestamp DESC
-      ) m
-      LEFT JOIN users u ON (
-        CASE 
-          WHEN m.senderId = ? THEN m.receiverId = u.id
-          ELSE m.senderId = u.id
-        END
-      )
-      LEFT JOIN coffee_stock cs ON m.coffeeStockId = cs.id
-      GROUP BY CASE WHEN m.senderId = ? THEN m.receiverId ELSE m.senderId END
-    ''', [userId, userId, userId, userId]);
-
-    final List<Conversation> conversations = [];
-    for (final map in maps) {
-      User? otherUser;
-      if (map['other_user_id'] != null) {
-        otherUser = User(
-          id: map['other_user_id'] as int?,
-          fullName: map['other_user_fullName']?.toString() ?? '',
-          phoneNumber: map['other_user_phoneNumber']?.toString() ?? '',
-          district: map['other_user_district']?.toString() ?? '',
-          password: map['other_user_password']?.toString() ?? '',
-          userType: (map['other_user_userType'] != null && map['other_user_userType'].toString().contains('farmer')) ? UserType.farmer : UserType.buyer,
-          profilePicturePath: map['other_user_profilePicturePath']?.toString(),
-          latitude: map['other_user_latitude'] is num ? (map['other_user_latitude'] as num).toDouble() : null,
-          longitude: map['other_user_longitude'] is num ? (map['other_user_longitude'] as num).toDouble() : null,
-          village: map['other_user_village']?.toString(),
-        );
-      }
-
-      final lastMessage = Message(
-        id: map['id'] as int?,
-        senderId: map['senderId'] as int,
-        receiverId: map['receiverId'] as int,
-        text: map['text']?.toString() ?? '',
-        timestamp: DateTime.parse(map['timestamp']?.toString() ?? DateTime.now().toIso8601String()),
-        isRead: (map['isRead'] as int?) == 1,
-        coffeeStockId: map['coffeeStockId'] as int?,
-      );
-
-      CoffeeStock? coffeeStock;
-      if (map['stock_id'] != null) {
-        coffeeStock = CoffeeStock(
-          id: map['stock_id'] as int?,
-          farmerId: map['stock_farmerId'] as int,
-          coffeeType: map['stock_coffeeType']?.toString() ?? '',
-          quantity: map['stock_quantity'] is num ? (map['stock_quantity'] as num).toDouble() : 0,
-          pricePerKg: map['stock_pricePerKg'] is num ? (map['stock_pricePerKg'] as num).toDouble() : 0,
-          coffeePicturePath: map['stock_coffeePicturePath']?.toString(),
-          description: map['stock_description']!.toString(),
-          isSold: (map['stock_isSold'] as int?) == 1,
-        );
-      }
-
-      if (otherUser != null) {
-        conversations.add(Conversation(
-          otherUser: otherUser,
-          lastMessage: lastMessage,
-          coffeeStock: coffeeStock,
-        ));
-      }
-    }
-
-    return conversations;
-  }
-
-  /// Check if a user has already reviewed another user
-  Future<bool> hasReviewByUser(int reviewerId, int reviewedUserId) async {
+  Future<List<Message>> getMessages(String userId1, String userId2) async {
     final db = await instance.database;
     final maps = await db.query(
-      'reviews',
-      where: 'reviewerId = ? AND reviewedUserId = ?',
-      whereArgs: [reviewerId, reviewedUserId],
+      'messages',
+      where: '(sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)',
+      whereArgs: [userId1, userId2, userId2, userId1],
+      orderBy: 'created_at ASC',
     );
-    return maps.isNotEmpty;
+    return maps.map((map) => Message.fromMap(map)).toList();
   }
 
-  /// Insert a new review
+  Future<List<Map<String, dynamic>>> getConversations(String userId) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT DISTINCT 
+        CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as otherUserId
+      FROM messages
+      WHERE sender_id = ? OR receiver_id = ?
+    ''', [userId, userId, userId]);
+  }
+
+  // Cart methods
+  Future<int> insertCartItem(CartItem item) async {
+    final db = await instance.database;
+    return await db.insert('cart_items', {
+      'id': item.id,
+      'buyerId': item.buyerId,
+      'coffeeStockId': item.stock.id,
+      'quantity': item.quantityKg,
+      'timestamp': item.addedAt.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<CartItem>> getCartItems(String buyerId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        c.id as cart_id, c.quantity as cart_quantity, c.timestamp as cart_timestamp,
+        s.*, 
+        u.id as user_id, u.name as user_name, u.phoneNumber as user_phoneNumber, 
+        u.password as user_password, u.userType as user_userType, u.location as user_location,
+        u.profilePicture as user_profilePicture, u.mustChangePassword as user_mustChangePassword,
+        u.suspendedUntil as user_suspendedUntil, u.suspensionReason as user_suspensionReason
+      FROM cart_items c
+      JOIN coffee_stock s ON c.coffeeStockId = s.id
+      JOIN users u ON s.farmer_id = u.id
+      WHERE c.buyerId = ?
+    ''', [buyerId]);
+
+    return maps.map((map) {
+      final stock = CoffeeStock.fromMap(map);
+      final farmer = kaawa.User(
+        id: map['user_id'],
+        fullName: map['user_name'],
+        phoneNumber: map['user_phoneNumber'],
+        district: map['user_location'] ?? '',
+        password: map['user_password'],
+        userType: kaawa.UserType.values.firstWhere(
+          (e) => e.toString().split('.').last == map['user_userType'],
+          orElse: () => kaawa.UserType.farmer,
+        ),
+        profilePicturePath: map['user_profilePicture'],
+        mustChangePassword: map['user_mustChangePassword'] == 1,
+        suspendedUntil: parseDateSafe(map['user_suspendedUntil']),
+        suspensionReason: map['user_suspensionReason'],
+      );
+
+      return CartItem(
+        id: map['cart_id'],
+        buyerId: buyerId,
+        stock: stock,
+        farmer: farmer,
+        quantityKg: (map['cart_quantity'] as num).toDouble(),
+        addedAt: parseDateSafe(map['cart_timestamp']) ?? DateTime.now(),
+      );
+    }).toList();
+  }
+
+  Future<int> deleteCartItem(String id) async {
+    final db = await instance.database;
+    return await db.delete('cart_items', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> clearCart(String buyerId) async {
+    final db = await instance.database;
+    return await db.delete('cart_items', where: 'buyerId = ?', whereArgs: [buyerId]);
+  }
+
+  // Review methods
   Future<int> insertReview(Review review) async {
     final db = await instance.database;
     return await db.insert('reviews', review.toMap());
   }
 
-  /// Get rating summary for a user (average rating and count)
-  Future<Map<String, dynamic>> getRatingSummaryForUser(int userId) async {
+  Future<List<Review>> getReviewsForUser(String userId) async {
     final db = await instance.database;
-    final result = await db.rawQuery(
-      'SELECT AVG(rating) as avg, COUNT(*) as count FROM reviews WHERE reviewedUserId = ?',
-      [userId],
-    );
-    
-    if (result.isNotEmpty && result.first['avg'] != null) {
+    final maps = await db.query('reviews', where: 'reviewedUserId = ?', whereArgs: [userId]);
+    return maps.map((map) => Review.fromMap(map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getReviewsWithReviewers(String userId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.rawQuery('''
+      SELECT 
+        r.id as review_id, r.reviewerId as review_reviewerId, r.reviewedUserId as review_reviewedUserId,
+        r.rating as review_rating, r.comment as review_comment, r.timestamp as review_timestamp,
+        u.id as user_id, u.name as user_name, u.phoneNumber as user_phoneNumber, 
+        u.password as user_password, u.userType as user_userType, u.location as user_location,
+        u.profilePicture as user_profilePicture, u.mustChangePassword as user_mustChangePassword,
+        u.suspendedUntil as user_suspendedUntil, u.suspensionReason as user_suspensionReason
+      FROM reviews r
+      JOIN users u ON r.reviewerId = u.id
+      WHERE r.reviewedUserId = ?
+      ORDER BY r.timestamp DESC
+    ''', [userId]);
+
+    return maps.map((map) {
+      final reviewer = kaawa.User(
+        id: map['user_id'],
+        fullName: map['user_name'],
+        phoneNumber: map['user_phoneNumber'],
+        district: map['user_location'] ?? '',
+        password: map['user_password'],
+        userType: kaawa.UserType.values.firstWhere(
+          (e) => e.toString().split('.').last == map['user_userType'],
+          orElse: () => kaawa.UserType.buyer,
+        ),
+        profilePicturePath: map['user_profilePicture'],
+        mustChangePassword: map['user_mustChangePassword'] == 1,
+        suspendedUntil: parseDateSafe(map['user_suspendedUntil']),
+        suspensionReason: map['user_suspensionReason'],
+      );
+
       return {
-        'avg': result.first['avg'],
-        'count': result.first['count'] ?? 0,
+        'review': {
+          'id': map['review_id'],
+          'reviewerId': map['review_reviewerId'],
+          'reviewedUserId': map['review_reviewedUserId'],
+          'rating': map['review_rating'],
+          'reviewText': map['review_comment'],
+          'timestamp': map['review_timestamp'],
+        },
+        'reviewer': reviewer,
       };
-    }
-    
-    return {'avg': 0.0, 'count': 0};
+    }).toList();
   }
 
-  // ======================== PURCHASE REQUEST RESPONSE HELPERS ========================
-
-  /// Get a specific purchase request message with full buyer and farmer details
-  Future<Map<String, dynamic>?> getPurchaseRequestWithDetails(int messageId) async {
+  // Admin methods
+  Future<List<kaawa.User>> getAllUsers() async {
     final db = await instance.database;
-    final result = await db.rawQuery('''
-      SELECT
-        m.id,
-        m.senderId,
-        m.receiverId,
-        m.text,
-        m.timestamp,
-        m.isRead,
-        m.isPurchaseRequest,
-        m.purchaseRequestData,
-        buyer.id as buyer_id,
-        buyer.fullName as buyer_fullName,
-        buyer.phoneNumber as buyer_phoneNumber,
-        buyer.district as buyer_district,
-        buyer.userType as buyer_userType,
-        buyer.profilePicturePath as buyer_profilePicturePath,
-        farmer.id as farmer_id,
-        farmer.fullName as farmer_fullName,
-        farmer.phoneNumber as farmer_phoneNumber,
-        farmer.district as farmer_district,
-        farmer.userType as farmer_userType,
-        farmer.profilePicturePath as farmer_profilePicturePath
-      FROM messages m
-      LEFT JOIN users buyer ON m.senderId = buyer.id
-      LEFT JOIN users farmer ON m.receiverId = farmer.id
-      WHERE m.id = ? AND m.isPurchaseRequest = 1
-    ''', [messageId]);
-
-    if (result.isEmpty) return null;
-
-    final row = result.first;
-    return {
-      'messageId': row['id'],
-      'senderId': row['senderId'],
-      'receiverId': row['receiverId'],
-      'text': row['text'],
-      'timestamp': row['timestamp'],
-      'isRead': row['isRead'],
-      'purchaseRequestData': row['purchaseRequestData'],
-      'buyer': {
-        'id': row['buyer_id'],
-        'fullName': row['buyer_fullName'],
-        'phoneNumber': row['buyer_phoneNumber'],
-        'district': row['buyer_district'],
-        'userType': row['buyer_userType'],
-        'profilePicturePath': row['buyer_profilePicturePath'],
-      },
-      'farmer': {
-        'id': row['farmer_id'],
-        'fullName': row['farmer_fullName'],
-        'phoneNumber': row['farmer_phoneNumber'],
-        'district': row['farmer_district'],
-        'userType': row['farmer_userType'],
-        'profilePicturePath': row['farmer_profilePicturePath'],
-      },
-    };
+    final maps = await db.query('users');
+    return maps.map((map) => kaawa.User.fromMap(map)).toList();
   }
 
-  /// Send a response message to a purchase request
-  /// Returns the ID of the sent message
-  Future<int> respondToPurchaseRequest(int purchaseRequestMessageId, String responseText, int farmerId, int buyerId) async {
+  Future<int> logAdminAction(String adminId, String action, String targetType, String targetId, {String? details}) async {
     final db = await instance.database;
+    return await db.insert('admin_logs', {
+      'adminId': adminId,
+      'action': action,
+      'targetType': targetType,
+      'targetId': targetId,
+      'timestamp': DateTime.now().toIso8601String(),
+      'details': details,
+    });
+  }
 
+  // Purchase Request methods
+  Future<int> insertPurchaseRequest(String buyerId, String farmerId, String coffeeStockId, double quantity, double totalPrice) async {
+    final db = await instance.database;
+    final message = Message(
+      senderId: buyerId,
+      receiverId: farmerId,
+      text: 'Purchase Request: $quantity kg of coffee',
+      timestamp: DateTime.now(),
+      isPurchaseRequest: true,
+      coffeeStockId: coffeeStockId,
+    );
+    final map = message.toMap();
+    map['is_purchase_request'] = 1;
+    return await db.insert('messages', map);
+  }
+
+  Future<int> respondToPurchaseRequest(String farmerId, String buyerId, String responseText) async {
+    final db = await instance.database;
     final responseMessage = Message(
       senderId: farmerId,
       receiverId: buyerId,
@@ -1015,110 +393,102 @@ class DatabaseHelper {
       timestamp: DateTime.now(),
       isPurchaseRequest: false,
     );
-
     return await db.insert('messages', responseMessage.toMap());
   }
 
-  /// Get all responses to a specific purchase request
-  /// Returns messages sent by the farmer in response to the purchase request
-  Future<List<Message>> getPurchaseRequestResponses(int buyerId, int farmerId, DateTime purchaseRequestTime) async {
+  Future<List<Message>> getPurchaseRequestResponses(String buyerId, String farmerId, DateTime purchaseRequestTime) async {
     final db = await instance.database;
-
-    // Get all messages from farmer to buyer after the purchase request was sent
     final maps = await db.query(
       'messages',
-      where: 'senderId = ? AND receiverId = ? AND timestamp > ? AND isPurchaseRequest = 0',
+      where: 'sender_id = ? AND receiver_id = ? AND created_at > ? AND is_purchase_request = 0',
       whereArgs: [farmerId, buyerId, purchaseRequestTime.toIso8601String()],
-      orderBy: 'timestamp ASC',
+      orderBy: 'created_at ASC',
     );
-
     return maps.map((map) => Message.fromMap(map)).toList();
   }
 
-  /// Check if a farmer has already responded to a purchase request from a specific buyer
-  Future<bool> hasRespondedToPurchaseRequest(int buyerId, int farmerId, DateTime purchaseRequestTime) async {
+  Future<bool> hasRespondedToPurchaseRequest(String buyerId, String farmerId, DateTime purchaseRequestTime) async {
     final responses = await getPurchaseRequestResponses(buyerId, farmerId, purchaseRequestTime);
     return responses.isNotEmpty;
   }
 
-  /// Get all unread purchase requests for a farmer
-  Future<List<Message>> getUnreadPurchaseRequestsForFarmer(int farmerId) async {
+  Future<List<Message>> getUnreadPurchaseRequestsForFarmer(String farmerId) async {
     final db = await instance.database;
     final maps = await db.query(
       'messages',
-      where: 'receiverId = ? AND isPurchaseRequest = 1 AND isRead = 0',
+      where: 'receiver_id = ? AND is_purchase_request = 1 AND is_read = 0',
       whereArgs: [farmerId],
-      orderBy: 'timestamp DESC',
+      orderBy: 'created_at DESC',
     );
     return maps.map((map) => Message.fromMap(map)).toList();
   }
 
-  /// Mark a purchase request as read
+  Future<List<Message>> getPurchaseRequestsForFarmer(String farmerId) async {
+    final db = await instance.database;
+    final maps = await db.query(
+      'messages',
+      where: 'receiver_id = ? AND is_purchase_request = 1',
+      whereArgs: [farmerId],
+      orderBy: 'created_at DESC',
+    );
+    return maps.map((map) => Message.fromMap(map)).toList();
+  }
+
   Future<void> markPurchaseRequestAsRead(int messageId) async {
     final db = await instance.database;
-    await db.update('messages', {'isRead': 1}, where: 'id = ? AND isPurchaseRequest = 1', whereArgs: [messageId]);
+    await db.update('messages', {'is_read': 1}, where: 'id = ? AND is_purchase_request = 1', whereArgs: [messageId]);
   }
 
-  /// Get conversation history between buyer and farmer
-  /// This includes both regular messages and purchase requests
-  Future<List<Message>> getBuyerFarmerConversation(int buyerId, int farmerId) async {
+  Future<List<Message>> getBuyerFarmerConversation(String buyerId, String farmerId) async {
     final db = await instance.database;
     final maps = await db.query(
       'messages',
-      where: '(senderId = ? AND receiverId = ?) OR (senderId = ? AND receiverId = ?)',
+      where: '(sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)',
       whereArgs: [buyerId, farmerId, farmerId, buyerId],
-      orderBy: 'timestamp ASC',
+      orderBy: 'created_at ASC',
     );
     return maps.map((map) => Message.fromMap(map)).toList();
   }
 
-  /// Get all purchase requests from a specific buyer to a specific farmer
-  Future<List<Message>> getPurchaseRequestsBetween(int buyerId, int farmerId) async {
+  Future<List<Message>> getPurchaseRequestsBetween(String buyerId, String farmerId) async {
     final db = await instance.database;
     final maps = await db.query(
       'messages',
-      where: 'senderId = ? AND receiverId = ? AND isPurchaseRequest = 1',
+      where: 'sender_id = ? AND receiver_id = ? AND is_purchase_request = 1',
       whereArgs: [buyerId, farmerId],
-      orderBy: 'timestamp DESC',
+      orderBy: 'created_at DESC',
     );
     return maps.map((map) => Message.fromMap(map)).toList();
   }
 
-  /// Get the count of unresponded purchase requests for a farmer
-  /// (those that don't have any follow-up messages from the farmer)
-  Future<int> getUnrespondedPurchaseRequestCount(int farmerId) async {
+  Future<int> getUnrespondedPurchaseRequestCount(String farmerId) async {
     final db = await instance.database;
-
-    // Get all purchase requests for this farmer
     final purchaseRequests = await db.rawQuery('''
-      SELECT DISTINCT senderId, MIN(id) as first_message_id
+      SELECT DISTINCT sender_id, MIN(id) as first_message_id
       FROM messages
-      WHERE receiverId = ? AND isPurchaseRequest = 1
-      GROUP BY senderId
+      WHERE receiver_id = ? AND is_purchase_request = 1
+      GROUP BY sender_id
     ''', [farmerId]);
 
     int unrespondedCount = 0;
-
     for (final pr in purchaseRequests) {
-      final buyerId = pr['senderId'];
+      final buyerId = pr['sender_id'] as String;
       final prTimestamp = await db.rawQuery('''
-        SELECT timestamp FROM messages WHERE id = ?
+        SELECT created_at FROM messages WHERE id = ?
       ''', [pr['first_message_id']]);
 
       if (prTimestamp.isNotEmpty) {
-        final prTime = prTimestamp.first['timestamp'] as String;
+        final prTime = prTimestamp.first['created_at'] as String;
         final responses = await db.query(
           'messages',
-          where: 'senderId = ? AND receiverId = ? AND timestamp > ? AND isPurchaseRequest = 0',
+          where: 'sender_id = ? AND receiver_id = ? AND created_at > ? AND is_purchase_request = 0',
           whereArgs: [farmerId, buyerId, prTime],
         );
-
         if (responses.isEmpty) {
           unrespondedCount++;
         }
       }
     }
-
     return unrespondedCount;
   }
 }

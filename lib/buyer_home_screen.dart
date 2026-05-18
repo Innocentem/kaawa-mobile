@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/conversations_screen.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/database_helper.dart';
 import 'package:kaawa/welcome_screen.dart';
 import 'package:kaawa/profile_screen.dart';
@@ -13,16 +14,19 @@ import 'package:provider/provider.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
 import 'package:kaawa/data/cart_item.dart';
 import 'package:kaawa/cart_screen.dart';
+import 'package:kaawa/favorites_screen.dart';
 import 'package:kaawa/widgets/listing_carousel.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/product_detail_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa/review_notifications_screen.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kaawa/utils/date_utils.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
-  final User buyer;
+  final kaawa.User buyer;
   const BuyerHomeScreen({super.key, required this.buyer});
 
   @override
@@ -30,22 +34,25 @@ class BuyerHomeScreen extends StatefulWidget {
 }
 
 class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
-  late Future<List<CoffeeStock>> _coffeeStockFuture;
+  late Stream<List<CoffeeStock>> _coffeeStockStream;
   List<CoffeeStock> _allCoffeeStock = [];
   List<CoffeeStock> _filteredCoffeeStock = [];
-  Set<int> _interestedStockIds = {};
-  final Map<int, int> _interestCounts = {};
-  final Map<int, User> _farmerCache = {};
+  Set<String> _interestedStockIds = {};
+  final Map<String, int> _interestCounts = {};
+  final Map<String, kaawa.User> _farmerCache = {};
   final _searchController = TextEditingController();
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
   int _unreadReviewCount = 0;
+  StreamSubscription<int>? _messageSubscription;
+  StreamSubscription<int>? _reviewSubscription;
   final AuthService _authService = AuthService();
-  late User _currentBuyer;
+  final SupabaseService _supabaseService = SupabaseService.instance;
+  late kaawa.User _currentBuyer;
 
   // Cart state
-  Map<int, CartItem> _cart = {}; // stock.id -> CartItem
+  Map<String, CartItem> _cart = {}; // stock.id -> CartItem
   int _cartItemCount = 0;
 
   final LayerLink _profileLink = LayerLink();
@@ -59,11 +66,26 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     WidgetsBinding.instance.addObserver(this);
     _currentBuyer = widget.buyer;
     _checkSuspensionAndLogout();
-    _coffeeStockFuture = _getCoffeeStock();
+    _coffeeStockStream = _supabaseService.getAllCoffeeStockStream();
     _searchController.addListener(_filterCoffeeStock);
-    _getUnreadMessageCount();
     _getUnreadReviewCount();
     _loadCartFromPrefs();
+
+    _messageSubscription = _supabaseService.getUnreadMessageCountStream(widget.buyer.id!).listen((count) {
+      if (mounted) {
+        setState(() {
+          _unreadMessageCount = count;
+        });
+      }
+    });
+
+    _reviewSubscription = _supabaseService.getUnreadReviewNotificationCountStream(widget.buyer.id!).listen((count) {
+      if (mounted) {
+        setState(() {
+          _unreadReviewCount = count;
+        });
+      }
+    });
 
     _animationController = AnimationController(
       vsync: this,
@@ -81,6 +103,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageSubscription?.cancel();
+    _reviewSubscription?.cancel();
     _animationController.dispose();
     // Do not clear cart on dispose; cart is persisted across sessions unless user clears it
     super.dispose();
@@ -94,11 +118,12 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   }
 
   Future<void> _checkSuspensionAndLogout() async {
-    final current = await DatabaseHelper.instance.getUserById(widget.buyer.id!);
+    final current = await _supabaseService.getProfile(widget.buyer.id!);
     if (current == null || !current.isSuspended) return;
     await _authService.logout();
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       final remaining = current.suspensionRemainingText;
       await showDialog<void>(
         context: context,
@@ -135,29 +160,29 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   }
 
   Future<void> _getUnreadMessageCount() async {
-    final count = await DatabaseHelper.instance.getUnreadMessageCount(widget.buyer.id!);
+    final count = await _supabaseService.getUnreadMessageCount(widget.buyer.id!);
     setState(() {
       _unreadMessageCount = count;
     });
   }
 
   Future<void> _getUnreadReviewCount() async {
-    final count = await DatabaseHelper.instance.getUnreadReviewNotificationCount(widget.buyer.id!);
+    final count = await _supabaseService.getUnreadReviewNotificationCount(widget.buyer.id!);
     if (!mounted) return;
     setState(() => _unreadReviewCount = count);
   }
 
   Future<List<CoffeeStock>> _getCoffeeStock() async {
-    final stocks = await DatabaseHelper.instance.getAllCoffeeStock();
+    final stocks = await _supabaseService.getAllCoffeeStock();
     // preload interest data for the current buyer
-    _interestedStockIds = (await DatabaseHelper.instance.getInterestedStockIdsForBuyer(widget.buyer.id!)).toSet();
+    _interestedStockIds = (await _supabaseService.getInterestedStockIdsForBuyer(widget.buyer.id!)).toSet();
     // preload counts + farmer cache
     for (final s in stocks) {
       if (s.id != null) {
-        final c = await DatabaseHelper.instance.getInterestCountForStock(s.id!);
+        final c = await _supabaseService.getInterestCountForStock(s.id!);
         _interestCounts[s.id!] = c;
       }
-      final farmer = await DatabaseHelper.instance.getUserById(s.farmerId);
+      final farmer = await _supabaseService.getProfile(s.farmerId);
       if (farmer != null) {
         _farmerCache[s.farmerId] = farmer;
       }
@@ -167,12 +192,16 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
 
   void _filterCoffeeStock() {
     final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredCoffeeStock = _allCoffeeStock.where((stock) {
-        final coffeeTypeLower = stock.coffeeType.toLowerCase();
-        return coffeeTypeLower.contains(query);
-      }).toList();
-    });
+    final filtered = _allCoffeeStock.where((stock) {
+      final coffeeTypeLower = stock.coffeeType.toLowerCase();
+      return coffeeTypeLower.contains(query);
+    }).toList();
+    
+    if (filtered.length != _filteredCoffeeStock.length || !filtered.every((s) => _filteredCoffeeStock.contains(s))) {
+       setState(() {
+        _filteredCoffeeStock = filtered;
+      });
+    }
   }
 
   Future<void> _handleLogoutRequest() async {
@@ -214,7 +243,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     }
   }
 
-  void _addToCart(CoffeeStock stock, User farmer, double quantity) {
+  void _addToCart(CoffeeStock stock, kaawa.User farmer, double quantity) {
     if (stock.id == null) return;
     final sid = stock.id!;
     setState(() {
@@ -233,7 +262,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Updated ${stock.coffeeType} to ${newQty} Kg in cart')));
       } else {
         _cart[sid] = CartItem(
-          id: DateTime.now().millisecondsSinceEpoch,
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
           buyerId: widget.buyer.id!,
           stock: stock,
           farmer: farmer,
@@ -246,7 +275,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
             action: SnackBarAction(
               label: 'View Cart',
               onPressed: () async {
-                final result = await Navigator.push<Map<int, CartItem>>(
+                final result = await Navigator.push<Map<String, CartItem>>(
                   context,
                   MaterialPageRoute(
                     builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart),
@@ -291,23 +320,23 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       final s = prefs.getString('cart_${widget.buyer.id}');
       if (s == null || s.isEmpty) return;
       final List<dynamic> list = jsonDecode(s);
-      final Map<int, CartItem> loaded = {};
+      final Map<String, CartItem> loaded = {};
       for (final entry in list) {
-        final stockId = (entry['stockId'] as num?)?.toInt();
-        final farmerId = (entry['farmerId'] as num?)?.toInt();
+        final stockId = entry['stockId'] as String?;
+        final farmerId = entry['farmerId'] as String?;
         final quantity = (entry['quantityKg'] as num?)?.toDouble() ?? 0.0;
         final addedAtStr = entry['addedAt'] as String?;
         if (stockId == null || farmerId == null) continue;
-        final stock = await DatabaseHelper.instance.getCoffeeStockById(stockId);
-        final farmer = await DatabaseHelper.instance.getUserById(farmerId);
+        final stock = await _supabaseService.getCoffeeStockById(stockId);
+        final farmer = await _supabaseService.getProfile(farmerId);
         if (stock == null || farmer == null) continue;
         loaded[stockId] = CartItem(
-          id: DateTime.now().millisecondsSinceEpoch,
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
           buyerId: widget.buyer.id!,
           stock: stock,
           farmer: farmer,
           quantityKg: quantity,
-          addedAt: addedAtStr != null ? DateTime.parse(addedAtStr) : DateTime.now(),
+          addedAt: parseDateSafe(addedAtStr) ?? DateTime.now(),
         );
       }
       if (!mounted) return;
@@ -328,9 +357,9 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     return parts;
   }
 
-  Future<void> _onCallPressed(int farmerId) async {
+  Future<void> _onCallPressed(String farmerId) async {
     try {
-      final farmer = await DatabaseHelper.instance.getUserById(farmerId);
+      final farmer = await _supabaseService.getProfile(farmerId);
       if (farmer == null || farmer.phoneNumber.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Farmer phone number not available')));
         return;
@@ -342,7 +371,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   }
 
   Future<void> _refreshCurrentBuyer() async {
-    final refreshed = await DatabaseHelper.instance.getUserById(widget.buyer.id!);
+    final refreshed = await _supabaseService.getProfile(widget.buyer.id!);
     if (refreshed == null || !mounted) return;
     setState(() {
       _currentBuyer = refreshed;
@@ -498,6 +527,144 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     );
   }
 
+  Widget _buildSearchForm(ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      child: CupertinoTextField(
+        padding: const EdgeInsets.all(12),
+        controller: _searchController,
+        placeholder: "Search by coffee type",
+        placeholderStyle: TextStyle(color: theme.hintColor.withOpacity(0.5)),
+        prefix: Padding(
+          padding: const EdgeInsets.only(left: 12.0),
+          child: Icon(CupertinoIcons.search, color: theme.colorScheme.primary),
+        ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+        ),
+        style: TextStyle(color: theme.colorScheme.onSurface),
+      ),
+    );
+  }
+
+  Widget _buildHomeShortcuts(ThemeData theme) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            theme.colorScheme.primary.withOpacity(0.7),
+            theme.colorScheme.primary,
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 15),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: <Widget>[
+          _shortcutItem(theme, "Cart", Icons.shopping_cart, () => _openCart(), badgeCount: _cartItemCount),
+          _shortcutItem(theme, "Messages", Icons.message, () => _openMessages(), badgeCount: _unreadMessageCount),
+          _shortcutItem(theme, "Favorites", Icons.favorite, () => _openFavorites()),
+          _shortcutItem(theme, "Reviews", Icons.star, () => _openReviews(), badgeCount: _unreadReviewCount),
+        ],
+      ),
+    );
+  }
+
+  Widget _shortcutItem(ThemeData theme, String text, IconData icon, VoidCallback onTap, {int? badgeCount}) {
+    return InkWell(
+      onTap: onTap,
+      child: Column(
+        children: <Widget>[
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: Icon(icon, color: theme.colorScheme.primary, size: 36),
+              ),
+              if (badgeCount != null && badgeCount > 0)
+                Positioned(
+                  right: -4,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.error,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                    child: Center(
+                      child: Text(
+                        badgeCount > 99 ? '99+' : '$badgeCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            text,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openCart() async {
+    final result = await Navigator.push<Map<String, CartItem>>(
+      context,
+      MaterialPageRoute(builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart)),
+    );
+    if (result != null) setState(() { _cart = result; _cartItemCount = _cart.length; });
+  }
+
+  void _openMessages() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => ConversationsScreen(currentUser: widget.buyer))).then((_) => _getUnreadMessageCount());
+  }
+
+  void _openFavorites() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => FavoritesScreen(currentUser: widget.buyer)));
+  }
+
+  void _openReviews() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => ReviewNotificationsScreen(currentUser: _currentBuyer)));
+    _getUnreadReviewCount();
+  }
+
+  Widget _buildSectionHeader(ThemeData theme, String title, {VoidCallback? onAction}) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Text(title, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+          if (onAction != null)
+            TextButton(
+              onPressed: onAction,
+              child: const Text("See All"),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -509,512 +676,246 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       },
       child: Scaffold(
         appBar: AppBar(
-          backgroundColor: theme.colorScheme.primary,
-          // ensure icons use the onPrimary color for contrast
-          foregroundColor: theme.colorScheme.onPrimary,
-          iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-          actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-          title: Semantics(
-            label: 'Open profile',
-            button: true,
-            child: Tooltip(
-              message: 'Open profile',
-              child: CompositedTransformTarget(
-                link: _profileLink,
-                child: InkWell(
-                  key: _profileKey,
-                  borderRadius: BorderRadius.circular(24),
-                  onTap: _openProfile,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Hero(
-                        tag: _currentBuyer.id != null ? 'avatar-${_currentBuyer.id}' : UniqueKey(),
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: AppAvatar(
-                            filePath: _currentBuyer.profilePicturePath,
-                            imageUrl: _currentBuyer.profilePicturePath,
-                            size: 40,
-                          ),
-                        ),
-                      ),
-                      if (_unreadMessageCount > 0)
-                        Positioned(
-                          right: -6,
-                          top: -6,
-                          child: Container(
-                            padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle, border: Border.all(color: theme.colorScheme.onError, width: 1.5)),
-                            constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-                            child: Center(
-                              child: Text(
-                                _unreadMessageCount > 99 ? '99+' : '$_unreadMessageCount',
-                                style: TextStyle(color: theme.colorScheme.onError, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
+          backgroundColor: theme.colorScheme.surface,
+          elevation: 0,
+          foregroundColor: theme.colorScheme.onSurface,
+          iconTheme: IconThemeData(color: theme.colorScheme.primary),
+          title: Text("Kaawa Coffee", style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+          actions: [
+            IconButton(
+              onPressed: _openMessages,
+              icon: Stack(
+                children: [
+                  const Icon(Icons.notifications_none),
+                  if (_unreadMessageCount > 0)
+                    Positioned(right: 0, top: 0, child: Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle), constraints: const BoxConstraints(minWidth: 12, minHeight: 12))),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: GestureDetector(
+                onTap: _openProfile,
+                child: CompositedTransformTarget(
+                  link: _profileLink,
+                  child: AppAvatar(
+                    key: _profileKey,
+                    filePath: _currentBuyer.profilePicturePath,
+                    imageUrl: _currentBuyer.profilePicturePath,
+                    size: 36,
                   ),
                 ),
               ),
-            ),
-          ),
-           actions: [
-             IconButton(
-               icon: Icon(
-                 Provider.of<ThemeNotifier>(context).themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-                 color: theme.colorScheme.onPrimary,
-               ),
-               onPressed: () {
-                 Provider.of<ThemeNotifier>(context, listen: false).toggleTheme();
-               },
-             ),
-             Stack(
-               children: [
-                 IconButton(
-                   icon: const Icon(Icons.shopping_cart),
-                   tooltip: 'Shopping Cart',
-                   onPressed: () async {
-                     final result = await Navigator.push<Map<int, CartItem>>(
-                       context,
-                       MaterialPageRoute(
-                         builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart),
-                       ),
-                     );
-                     if (result != null) {
-                       setState(() {
-                         _cart = result;
-                         _cartItemCount = _cart.length;
-                       });
-                     }
-                   },
-                 ),
-                 if (_cartItemCount > 0)
-                   Positioned(
-                     right: 8,
-                     top: 8,
-                     child: Container(
-                       padding: const EdgeInsets.all(2),
-                       decoration: BoxDecoration(
-                         color: theme.colorScheme.error,
-                         borderRadius: BorderRadius.circular(8),
-                       ),
-                       constraints: const BoxConstraints(
-                         minWidth: 16,
-                         minHeight: 16,
-                       ),
-                       child: Text(
-                         _cartItemCount > 99 ? '99+' : '$_cartItemCount',
-                         style: TextStyle(
-                           color: theme.colorScheme.onError,
-                           fontSize: 10,
-                         ),
-                         textAlign: TextAlign.center,
-                       ),
-                     ),
-                   ),
-               ],
-             ),
-             Stack(
-               children: [
-                 CompositedTransformTarget(
-                   link: _messageLink,
-                   child: IconButton(
-                     key: _messageKey,
-                     icon: const Icon(Icons.message),
-                     onPressed: () {
-                       Navigator.push(
-                         context,
-                         MaterialPageRoute(
-                           builder: (context) => ConversationsScreen(currentUser: widget.buyer),
-                         ),
-                       ).then((_) => _getUnreadMessageCount());
-                     },
-                   ),
-                 ),
-                 if (_unreadMessageCount > 0)
-                   Positioned(
-                     right: 8,
-                     top: 8,
-                     child: Container(
-                       padding: const EdgeInsets.all(2),
-                       decoration: BoxDecoration(
-                         color: theme.colorScheme.error,
-                         borderRadius: BorderRadius.circular(8),
-                       ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        '$_unreadMessageCount',
-                        style: TextStyle(
-                          color: theme.colorScheme.onError,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            Stack(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.star_rate),
-                  tooltip: 'Reviews',
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReviewNotificationsScreen(currentUser: _currentBuyer),
-                      ),
-                    );
-                    await _getUnreadReviewCount();
-                  },
-                ),
-                if (_unreadReviewCount > 0)
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.error,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: Text(
-                        '$_unreadReviewCount',
-                        style: TextStyle(
-                          color: theme.colorScheme.onError,
-                          fontSize: 10,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            IconButton(
-              icon: const Icon(Icons.person),
-              onPressed: _openProfile,
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: _logout,
             ),
           ],
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        body: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 15),
+          child: StreamBuilder<List<CoffeeStock>>(
+            stream: _coffeeStockStream,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting && _allCoffeeStock.isEmpty) {
+                return const Center(child: CompactLoader());
+              }
+              if (snapshot.hasData) {
+                _allCoffeeStock = snapshot.data!;
+                // Update filtered list without immediate setState if possible, 
+                // or ensure it only updates when data actually changes
+                final query = _searchController.text.toLowerCase();
+                _filteredCoffeeStock = _allCoffeeStock.where((stock) {
+                  return stock.coffeeType.toLowerCase().contains(query);
+                }).toList();
+              }
+
+              return ListView(
                 children: [
-                  Text('Available Coffee', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 6),
-                  Tooltip(
-                    message: 'Tap a listing to view farmer details. Use message or cart to inquire/buy.',
-                    child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
-                  ),
+                  _buildSearchForm(theme),
+                  _buildHomeShortcuts(theme),
+                  _buildSectionHeader(theme, "Featured Listings"),
+                  _buildHorizontalList(theme),
+                  _buildSectionHeader(theme, "All Coffee Stock"),
+                  _buildCoffeeGrid(theme),
                 ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  labelText: 'Search by coffee type',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: FutureBuilder<List<CoffeeStock>>(
-                  future: _coffeeStockFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return Center(child: const SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading coffee stock'))));
-                    } else if (snapshot.hasError) {
-                      return const Center(child: Text('Error loading coffee stock.'));
-                    } else {
-                      _allCoffeeStock = snapshot.data ?? [];
-                      _filteredCoffeeStock = List.from(_allCoffeeStock);
-                      return FadeTransition(
-                        opacity: _animation,
-                        child: _filteredCoffeeStock.isEmpty && _searchController.text.isNotEmpty
-                            ? const Center(child: Text('No coffee stock found.'))
-                            : GridView.builder(
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  crossAxisSpacing: 16,
-                                  mainAxisSpacing: 16,
-                                  childAspectRatio: 0.6,
-                                ),
-                                itemCount: _filteredCoffeeStock.length,
-                                itemBuilder: (context, index) {
-                                  final stock = _filteredCoffeeStock[index];
-                                  final stockId = stock.id;
-                                  final liked = stockId != null && _interestedStockIds.contains(stockId);
-                                  final likeCount = stockId != null ? (_interestCounts[stockId] ?? 0) : 0;
-
-                                  final images = _parseImages(stock.coffeePicturePath);
-
-                                  return Card(
-                                    elevation: 4,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    color: stock.isSold ? theme.colorScheme.error.withAlpha((0.08 * 255).round()) : null,
-                                    child: InkWell(
-                                      onTap: () async {
-                                        final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer!),
-                                          ),
-                                        );
-                                      },
-                                      child: SingleChildScrollView(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            AspectRatio(
-                                              aspectRatio: 1,
-                                              child: ClipRRect(
-                                                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                                                child: Stack(
-                                                  children: [
-                                                    Positioned.fill(
-                                                      child: GestureDetector(
-                                        onTap: () async {
-                                                           // fetch farmer and open product detail (pass current buyer as currentUser)
-                                                           final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                           final result = await Navigator.push<Map<String, dynamic>>(
-                                                             context,
-                                                             MaterialPageRoute(
-                                                               builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer),
-                                                             ),
-                                                           );
-
-                                                           // Handle cart addition
-                                                           if (result != null && result['action'] == 'add_to_cart' && farmer != null) {
-                                                             final quantity = result['quantity'] as double;
-                                                             _addToCart(stock, farmer, quantity);
-                                                           }
-                                                         },
-                                                        child: ListingCarousel(images: images, fit: BoxFit.cover),
-                                                      ),
-                                                    ),
-                                                    if (stock.isSold)
-                                                      Positioned(
-                                                        top: 8,
-                                                        left: 8,
-                                                        child: _buildSoldBadge(theme),
-                                                      ),
-                                                    if (images.length > 1)
-                                                      Positioned(
-                                                        left: 0,
-                                                        right: 0,
-                                                        bottom: 6,
-                                                        child: Center(
-                                                          child: Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                            decoration: BoxDecoration(
-                                                              color: theme.colorScheme.surface.withAlpha((0.7 * 255).round()),
-                                                              borderRadius: BorderRadius.circular(12),
-                                                            ),
-                                                            child: _buildSwipeIndicator(images.length, theme),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    Positioned(
-                                                      left: 8,
-                                                      bottom: 8,
-                                                      child: Material(
-                                                        color: Colors.transparent,
-                                                        child: InkWell(
-                                                          borderRadius: BorderRadius.circular(18),
-                                                          onTap: () {
-                                                            final farmer = _farmerCache[stock.farmerId];
-                                                            if (farmer == null) return;
-                                                            Navigator.push(
-                                                              context,
-                                                              MaterialPageRoute(
-                                                                builder: (context) => ProfileScreen(currentUser: widget.buyer, profileOwner: farmer),
-                                                              ),
-                                                            );
-                                                          },
-                                                          child: AppAvatar(
-                                                            filePath: _farmerCache[stock.farmerId]?.profilePicturePath,
-                                                            imageUrl: _farmerCache[stock.farmerId]?.profilePicturePath,
-                                                            size: 36,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                            Padding(
-                                              padding: const EdgeInsets.all(8.0),
-                                              child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(stock.coffeeType, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                                                  const SizedBox(height: 4),
-                                                  Text('${stock.quantity} kg available', overflow: TextOverflow.ellipsis),
-                                                  Text('Price: UGX ${stock.pricePerKg}/kg', overflow: TextOverflow.ellipsis),
-                                                  if (stock.isSold)
-                                                    Text('SOLD', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.error, fontWeight: FontWeight.bold)),
-                                                ],
-                                              ),
-                                            ),
-                                            // interest / like row
-                                            Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                              child: Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Row(
-                                                    children: [
-                                                      IconButton(
-                                                        icon: Icon(liked ? Icons.favorite : Icons.favorite_border, color: liked ? theme.colorScheme.error : (IconTheme.of(context).color ?? theme.textTheme.bodySmall?.color)),
-                                                        onPressed: () async {
-                                                          if (stockId == null) return;
-                                                          if (liked) {
-                                                            // remove interest
-                                                            await DatabaseHelper.instance.removeInterest(stockId, widget.buyer.id!);
-                                                            setState(() {
-                                                              _interestedStockIds.remove(stockId);
-                                                              _interestCounts[stockId] = (_interestCounts[stockId] ?? 1) - 1;
-                                                            });
-                                                          } else {
-                                                            // add interest
-                                                            await DatabaseHelper.instance.addInterest(stockId, widget.buyer.id!);
-                                                            setState(() {
-                                                              _interestedStockIds.add(stockId);
-                                                              _interestCounts[stockId] = (_interestCounts[stockId] ?? 0) + 1;
-                                                            });
-
-                                                            // prompt to continue to chat
-                                                            final consent = await showDialog<bool>(
-                                                              context: context,
-                                                              builder: (context) => AlertDialog(
-                                                                title: const Text('Interested?'),
-                                                                content: const Text('Would you like to start a chat with the owner to acquire this listing?'),
-                                                                actions: [
-                                                                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('No')),
-                                                                  ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Yes')),
-                                                                ],
-                                                              ),
-                                                            );
-
-                                                            if (consent == true) {
-                                                              final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                              if (farmer != null) {
-                                                                Navigator.push(
-                                                                  context,
-                                                                  MaterialPageRoute(
-                                                                    builder: (context) => ChatScreen(
-                                                                      currentUser: widget.buyer,
-                                                                      otherUser: farmer,
-                                                                      coffeeStock: stock,
-                                                                    ),
-                                                                  ),
-                                                                );
-                                                              }
-                                                            }
-                                                          }
-                                                        },
-                                                      ),
-                                                      Text('$likeCount'),
-                                                    ],
-                                                  ),
-                                                  // contact owner quick action
-                                                  Row(
-                                                    children: [
-                                                      IconButton(
-                                                        icon: const Icon(Icons.call),
-                                                        onPressed: stock.isSold
-                                                            ? null
-                                                            : () async {
-                                                                _onCallPressed(stock.farmerId);
-                                                              },
-                                                      ),
-                                                      IconButton(
-                                                        icon: const Icon(Icons.message),
-                                                        onPressed: stock.isSold
-                                                            ? null
-                                                            : () async {
-                                                                final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                                if (farmer != null) {
-                                                                  Navigator.push(
-                                                                    context,
-                                                                    MaterialPageRoute(
-                                                                      builder: (context) => ChatScreen(
-                                                                        currentUser: widget.buyer,
-                                                                        otherUser: farmer,
-                                                                        coffeeStock: stock,
-                                                                      ),
-                                                                    ),
-                                                                  );
-                                                                }
-                                                              },
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                             const SizedBox(height: 8),
-                                             Row(
-                                               mainAxisAlignment: MainAxisAlignment.spaceAround,
-                                               children: [
-                                                 IconButton(
-                                                   icon: const Icon(Icons.shopping_cart),
-                                                   onPressed: stock.isSold
-                                                       ? null
-                                                       : () async {
-                                                           final farmer = await DatabaseHelper.instance.getUserById(stock.farmerId);
-                                                           Navigator.push(
-                                                             context,
-                                                             MaterialPageRoute(
-                                                               builder: (context) => ChatScreen(
-                                                                 currentUser: widget.buyer,
-                                                                 otherUser: farmer!,
-                                                                 initialMessage: 'I would like to buy your ${stock.coffeeType}.',
-                                                                 coffeeStock: stock,
-                                                               ),
-                                                             ),
-                                                           );
-                                                         },
-                                                 ),
-                                               ],
-                                             ),
-                                           ],
-                                         ),
-                                       ),
-                                     ),
-                                   );
-                                 },
-                              ),
-                      );
-                    }
-                  },
-                ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildHorizontalList(ThemeData theme) {
+    final featured = _allCoffeeStock.take(5).toList();
+    if (featured.isEmpty) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 220,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: featured.length,
+        itemBuilder: (context, index) {
+          final stock = featured[index];
+          final images = _parseImages(stock.coffeePicturePath);
+          final radius = BorderRadius.circular(12);
+
+          return Container(
+            width: 200,
+            margin: const EdgeInsets.only(right: 15),
+            child: Card(
+              elevation: 4,
+              clipBehavior: Clip.antiAlias,
+              shape: RoundedRectangleBorder(borderRadius: radius),
+              child: InkWell(
+                onTap: () async {
+                  final farmer = await _supabaseService.getProfile(stock.farmerId);
+                  if (!mounted) return;
+                  final result = await Navigator.push<Map<String, dynamic>>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProductDetailScreen(
+                        stock: stock,
+                        farmer: farmer,
+                        currentUser: widget.buyer,
+                      ),
+                    ),
+                  );
+                  if (result != null && result['action'] == 'add_to_cart' && farmer != null) {
+                    _addToCart(stock, farmer, result['quantity'] as double);
+                  }
+                },
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ListingCarousel(images: images, fit: BoxFit.cover),
+                    ),
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              theme.colorScheme.primary.withOpacity(0.2),
+                              Colors.black.withOpacity(0.7),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primary,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              "Featured",
+                              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                stock.coffeeType,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                "UGX ${stock.pricePerKg}/kg",
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                              if (stock.quantity <= 0)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: _buildSoldBadge(theme),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCoffeeGrid(ThemeData theme) {
+    if (_filteredCoffeeStock.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 20),
+        child: Center(child: Text("No coffee stock found.")),
+      );
+    }
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.75,
+      ),
+      itemCount: _filteredCoffeeStock.length,
+      itemBuilder: (context, index) {
+        final stock = _filteredCoffeeStock[index];
+        final images = _parseImages(stock.coffeePicturePath);
+        return Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: InkWell(
+            onTap: () async {
+              final farmer = await _supabaseService.getProfile(stock.farmerId);
+              if (!mounted) return;
+              final result = await Navigator.push<Map<String, dynamic>>(
+                context,
+                MaterialPageRoute(builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer)),
+              );
+              if (result != null && result['action'] == 'add_to_cart' && farmer != null) {
+                _addToCart(stock, farmer, result['quantity'] as double);
+              }
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                    child: ListingCarousel(images: images, fit: BoxFit.cover),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(stock.coffeeType, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text("UGX ${stock.pricePerKg}/kg", style: theme.textTheme.bodySmall, maxLines: 1),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

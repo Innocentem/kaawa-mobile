@@ -1,15 +1,16 @@
   import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/cart_item.dart';
 import 'package:kaawa/data/message_data.dart';
 import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class CartScreen extends StatefulWidget {
-  final User buyer;
-  final Map<int, CartItem> cartItems; // stock.id -> CartItem
+  final kaawa.User buyer;
+  final Map<String, CartItem> cartItems; // stock.id -> CartItem
 
   const CartScreen({
     super.key,
@@ -22,7 +23,7 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
-  late Map<int, CartItem> _localCart;
+  late Map<String, CartItem> _localCart;
 
   @override
   void initState() {
@@ -50,7 +51,7 @@ class _CartScreenState extends State<CartScreen> {
     }
   }
 
-  void _updateQuantity(int stockId, double newQuantity) {
+  void _updateQuantity(String stockId, double newQuantity) {
     setState(() {
       if (newQuantity <= 0) {
         _localCart.remove(stockId);
@@ -68,7 +69,7 @@ class _CartScreenState extends State<CartScreen> {
     });
   }
 
-  void _removeItem(int stockId) {
+  void _removeItem(String stockId) {
     setState(() {
       _localCart.remove(stockId);
     });
@@ -167,7 +168,7 @@ class _CartScreenState extends State<CartScreen> {
         purchaseRequestData: purchaseData,
       );
 
-      await DatabaseHelper.instance.insertMessage(requestMessage);
+      await SupabaseService.instance.sendMessage(requestMessage);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/review_data.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/database_helper.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 
 class ViewReviewsScreen extends StatefulWidget {
-  final User reviewedUser;
+  final kaawa.User reviewedUser;
   // optional: the currently logged-in user viewing the reviews
-  final User? currentUser;
+  final kaawa.User? currentUser;
   // callback to open a profile for a given reviewer (avoids circular import)
-  final void Function(User reviewer)? onOpenProfile;
+  final void Function(kaawa.User reviewer)? onOpenProfile;
 
   const ViewReviewsScreen({super.key, required this.reviewedUser, this.currentUser, this.onOpenProfile});
 

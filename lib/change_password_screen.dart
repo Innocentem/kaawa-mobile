@@ -2,11 +2,11 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'widgets/compact_loader.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
-  final User user;
+  final kaawa.User user;
   const ChangePasswordScreen({super.key, required this.user});
 
   @override
@@ -25,7 +25,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final hashed = sha256.convert(utf8.encode(_newPassword.text)).toString();
-    final updated = User(
+    final updated = kaawa.User(
       id: widget.user.id,
       fullName: widget.user.fullName,
       phoneNumber: widget.user.phoneNumber,

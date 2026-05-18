@@ -1,7 +1,7 @@
 enum UserType { farmer, buyer, admin }
 
 class User {
-  final int? id;
+  final String? id;
   final String fullName;
   final String phoneNumber;
   final String district;
@@ -64,36 +64,38 @@ class User {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'fullName': fullName,
-      'phoneNumber': phoneNumber,
+      'full_name': fullName,
+      'phone_number': phoneNumber,
       'district': district,
-      'password': password,
-      'userType': userType.toString(),
-      'profilePicturePath': profilePicturePath,
+      'user_type': userType.name,
+      'profile_picture_url': profilePicturePath,
       'latitude': latitude,
       'longitude': longitude,
       'village': village,
-      'mustChangePassword': mustChangePassword ? 1 : 0,
-      'suspendedUntil': suspendedUntil?.toIso8601String(),
-      'suspensionReason': suspensionReason,
+      'must_change_password': mustChangePassword,
+      'suspended_until': suspendedUntil?.toIso8601String(),
+      'suspension_reason': suspensionReason,
     };
   }
 
   factory User.fromMap(Map<String, dynamic> map) {
     return User(
-      id: map['id'],
-      fullName: map['fullName'],
-      phoneNumber: map['phoneNumber'],
-      district: map['district'],
-      password: map['password'],
-      userType: UserType.values.firstWhere((e) => e.toString() == map['userType']),
-      profilePicturePath: map['profilePicturePath'],
-      latitude: map['latitude'],
-      longitude: map['longitude'],
+      id: map['id']?.toString(),
+      fullName: map['fullName'] ?? map['full_name'] ?? '',
+      phoneNumber: map['phoneNumber'] ?? map['phone_number'] ?? '',
+      district: map['district'] ?? '',
+      password: map['password'] ?? '',
+      userType: UserType.values.firstWhere(
+        (e) => e.toString() == map['userType'] || e.name == map['user_type'],
+        orElse: () => UserType.buyer,
+      ),
+      profilePicturePath: map['profilePicturePath'] ?? map['profile_picture_url'],
+      latitude: map['latitude'] is num ? (map['latitude'] as num).toDouble() : null,
+      longitude: map['longitude'] is num ? (map['longitude'] as num).toDouble() : null,
       village: map['village'],
-      mustChangePassword: (map['mustChangePassword'] == null) ? false : (map['mustChangePassword'] == 1 || map['mustChangePassword'] == true),
-      suspendedUntil: (map['suspendedUntil'] == null) ? null : DateTime.tryParse(map['suspendedUntil'].toString()),
-      suspensionReason: map['suspensionReason']?.toString(),
+      mustChangePassword: map['mustChangePassword'] == 1 || map['mustChangePassword'] == true || map['must_change_password'] == true,
+      suspendedUntil: map['suspendedUntil'] != null ? DateTime.tryParse(map['suspendedUntil'].toString()) : (map['suspended_until'] != null ? DateTime.tryParse(map['suspended_until'].toString()) : null),
+      suspensionReason: map['suspensionReason'] ?? map['suspension_reason'],
     );
   }
 }

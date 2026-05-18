@@ -2,17 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
 import 'package:kaawa/widgets/listing_carousel.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/chat_screen.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:kaawa/write_review_screen.dart';
 import 'package:kaawa/profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final CoffeeStock stock;
-  final User? farmer;
-  final User? currentUser;
+  final kaawa.User? farmer;
+  final kaawa.User? currentUser;
 
   const ProductDetailScreen({super.key, required this.stock, this.farmer, this.currentUser});
 
@@ -45,7 +45,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   Future<void> _loadInterestedCount() async {
     if (widget.stock.id != null) {
-      final c = await DatabaseHelper.instance.getInterestCountForStock(widget.stock.id!);
+      final c = await SupabaseService.instance.getInterestCountForStock(widget.stock.id!);
       setState(() {
         _interestedCount = c;
       });
@@ -57,8 +57,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     final farmer = widget.farmer;
     if (currentUser == null || farmer == null) return;
     if (currentUser.id == farmer.id) return;
-    if (currentUser.userType == UserType.admin || farmer.userType == UserType.admin) return;
-    final exists = await DatabaseHelper.instance.hasReviewByUser(currentUser.id!, farmer.id!);
+    if (currentUser.userType == kaawa.UserType.admin || farmer.userType == kaawa.UserType.admin) return;
+    final exists = await SupabaseService.instance.hasReviewByUser(currentUser.id!, farmer.id!);
     if (!mounted) return;
     setState(() {
       _alreadyReviewed = exists;
@@ -226,7 +226,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                if (!widget.stock.isSold && widget.currentUser != null && widget.currentUser!.userType == UserType.buyer)
+                if (!widget.stock.isSold && widget.currentUser != null && widget.currentUser!.userType == kaawa.UserType.buyer)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Column(
@@ -355,7 +355,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                 const SizedBox(height: 20),
-                if (widget.currentUser != null && widget.farmer != null && widget.currentUser!.id != widget.farmer!.id && widget.currentUser!.userType != UserType.admin && widget.farmer!.userType != UserType.admin)
+                if (widget.currentUser != null && widget.farmer != null && widget.currentUser!.id != widget.farmer!.id && widget.currentUser!.userType != kaawa.UserType.admin && widget.farmer!.userType != kaawa.UserType.admin)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: ElevatedButton(

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
 class InterestedBuyersScreen extends StatefulWidget {
-  final User farmer;
+  final kaawa.User farmer;
   final CoffeeStock stock;
 
   const InterestedBuyersScreen({super.key, required this.farmer, required this.stock});
@@ -17,15 +17,15 @@ class InterestedBuyersScreen extends StatefulWidget {
 }
 
 class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
-  late Future<List<User>> _buyersFuture;
+  late Future<List<kaawa.User>> _buyersFuture;
 
   @override
   void initState() {
     super.initState();
     // mark interests as seen for this stock (so farmer notification/counts will clear)
-    _buyersFuture = DatabaseHelper.instance.markInterestsAsSeenForStock(widget.stock.id!).then((_) {
+    _buyersFuture = SupabaseService.instance.markInterestsAsSeenForStock(widget.stock.id!).then((_) {
       // after marking as seen, return the buyers list
-      return DatabaseHelper.instance.getInterestedBuyersForStock(widget.stock.id!);
+      return SupabaseService.instance.getInterestedBuyersForStock(widget.stock.id!);
     });
   }
 
@@ -33,7 +33,7 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Interested Buyers')),
-      body: FutureBuilder<List<User>>(
+      body: FutureBuilder<List<kaawa.User>>(
         future: _buyersFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox(height: 160, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading buyers'))));

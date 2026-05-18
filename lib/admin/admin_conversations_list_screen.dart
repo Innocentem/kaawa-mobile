@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/conversation_data.dart';
 import './admin_conversation_screen.dart' as acs;
 import '../widgets/compact_loader.dart';
 
 class AdminConversationsListScreen extends StatefulWidget {
-  final int userId;
+  final String userId;
   const AdminConversationsListScreen({super.key, required this.userId});
 
   @override
@@ -18,7 +18,7 @@ class _AdminConversationsListScreenState extends State<AdminConversationsListScr
   @override
   void initState() {
     super.initState();
-    _convsFuture = DatabaseHelper.instance.getConversations(widget.userId);
+    _convsFuture = SupabaseService.instance.getConversations(widget.userId);
   }
 
   @override

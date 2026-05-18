@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/message_data.dart';
 import 'package:kaawa/data/database_helper.dart';
 import 'package:kaawa/chat_screen.dart';
@@ -9,7 +9,7 @@ import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
 class PurchaseRequestsScreen extends StatefulWidget {
-  final User farmer;
+  final kaawa.User farmer;
   const PurchaseRequestsScreen({super.key, required this.farmer});
 
   @override
@@ -25,11 +25,11 @@ class _PurchaseRequestsScreenState extends State<PurchaseRequestsScreen> {
     _purchaseRequestsFuture = DatabaseHelper.instance.getPurchaseRequestsForFarmer(widget.farmer.id!);
   }
 
-  Future<User?> _getBuyerInfo(int buyerId) async {
-    return await DatabaseHelper.instance.getUserById(buyerId);
+  Future<kaawa.User?> _getBuyerInfo(String buyerId) async {
+    return await DatabaseHelper.instance.getUser(buyerId);
   }
 
-  Widget _buildPurchaseRequestCard(BuildContext context, Message message, User? buyer, ThemeData theme) {
+  Widget _buildPurchaseRequestCard(BuildContext context, Message message, kaawa.User? buyer, ThemeData theme) {
     try {
       final data = jsonDecode(message.purchaseRequestData!);
       final items = (data['items'] as List?) ?? [];
@@ -321,7 +321,7 @@ class _PurchaseRequestsScreenState extends State<PurchaseRequestsScreen> {
                     itemCount: requests.length,
                     itemBuilder: (context, index) {
                       final request = requests[index];
-                      return FutureBuilder<User?>(
+                      return FutureBuilder<kaawa.User?>(
                         future: _getBuyerInfo(request.senderId),
                         builder: (context, buyerSnapshot) {
                           final buyer = buyerSnapshot.data;

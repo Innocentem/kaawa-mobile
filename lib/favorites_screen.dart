@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/profile_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
 class FavoritesScreen extends StatefulWidget {
-  final User currentUser;
+  final kaawa.User currentUser;
 
   const FavoritesScreen({super.key, required this.currentUser});
 
@@ -15,7 +15,7 @@ class FavoritesScreen extends StatefulWidget {
 }
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
-  late Future<List<User>> _favoritesFuture;
+  late Future<List<kaawa.User>> _favoritesFuture;
 
   @override
   void initState() {
@@ -23,8 +23,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     _favoritesFuture = _getFavorites();
   }
 
-  Future<List<User>> _getFavorites() async {
-    return await DatabaseHelper.instance.getFavorites(widget.currentUser.id!);
+  Future<List<kaawa.User>> _getFavorites() async {
+    return await SupabaseService.instance.getFavorites(widget.currentUser.id!);
   }
 
   @override
@@ -33,7 +33,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       appBar: AppBar(
         title: const Text('My Favorites'),
       ),
-      body: FutureBuilder<List<User>>(
+      body: FutureBuilder<List<kaawa.User>>(
         future: _favoritesFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {

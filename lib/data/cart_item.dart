@@ -1,11 +1,11 @@
 import 'package:kaawa/data/coffee_stock_data.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 
 class CartItem {
-  final int id;
-  final int buyerId;
+  final String id;
+  final String buyerId;
   final CoffeeStock stock;
-  final User farmer;
+  final kaawa.User farmer;
   final double quantityKg;
   final DateTime addedAt;
 
@@ -31,4 +31,3 @@ class CartItem {
     };
   }
 }
-

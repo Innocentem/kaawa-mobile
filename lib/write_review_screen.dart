@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/review_data.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
+import 'package:kaawa/data/supabase_service.dart';
 
 class WriteReviewScreen extends StatefulWidget {
-  final User reviewer;
-  final User reviewedUser;
+  final kaawa.User reviewer;
+  final kaawa.User reviewedUser;
 
   const WriteReviewScreen({super.key, required this.reviewer, required this.reviewedUser});
 
@@ -26,7 +26,7 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   }
 
   Future<void> _loadReviewStatus() async {
-    final exists = await DatabaseHelper.instance.hasReviewByUser(widget.reviewer.id!, widget.reviewedUser.id!);
+    final exists = await SupabaseService.instance.hasReviewByUser(widget.reviewer.id!, widget.reviewedUser.id!);
     if (!mounted) return;
     setState(() => _alreadyReviewed = exists);
   }
@@ -43,12 +43,14 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
         reviewerId: widget.reviewer.id!,
         reviewedUserId: widget.reviewedUser.id!,
         rating: _rating,
-        reviewText: _reviewController.text,
+        comment: _reviewController.text,
       );
 
-      final insertedId = await DatabaseHelper.instance.insertReview(newReview);
-      if (insertedId < 0) {
+      try {
+        await SupabaseService.instance.insertReview(newReview);
+      } catch (e) {
         if (!mounted) return;
+        // In Supabase, the unique constraint (reviewer_id, reviewed_user_id) will throw an error
         setState(() => _alreadyReviewed = true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You already reviewed this user.')),

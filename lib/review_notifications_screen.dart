@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/supabase_service.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/profile_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
 class ReviewNotificationsScreen extends StatefulWidget {
-  final User currentUser;
+  final kaawa.User currentUser;
   const ReviewNotificationsScreen({super.key, required this.currentUser});
 
   @override
@@ -23,10 +23,10 @@ class _ReviewNotificationsScreenState extends State<ReviewNotificationsScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _loadNotifications() async {
-    final rows = await DatabaseHelper.instance.getReviewNotifications(widget.currentUser.id!);
-    final hasUnread = rows.any((row) => (row['notification'] as Map<String, dynamic>)['isRead'] == 0);
+    final rows = await SupabaseService.instance.getReviewNotifications(widget.currentUser.id!);
+    final hasUnread = rows.any((row) => (row['notification'] as Map<String, dynamic>)['isRead'] == false);
     if (hasUnread) {
-      await DatabaseHelper.instance.markAllReviewNotificationsRead(widget.currentUser.id!);
+      await SupabaseService.instance.markAllReviewNotificationsRead(widget.currentUser.id!);
     }
     return rows;
   }
@@ -70,7 +70,7 @@ class _ReviewNotificationsScreenState extends State<ReviewNotificationsScreen> {
               final entry = entries[index];
               final notification = entry['notification'] as Map<String, dynamic>;
               final review = entry['review'] as Map<String, dynamic>;
-              final reviewer = entry['reviewer'] as User?;
+              final reviewer = entry['reviewer'] as kaawa.User?;
               final ratingVal = review['rating'];
               final rating = ratingVal is num ? ratingVal.toDouble() : double.tryParse(ratingVal?.toString() ?? '') ?? 0.0;
               final createdAt = notification['createdAt']?.toString();

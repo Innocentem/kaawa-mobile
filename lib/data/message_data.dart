@@ -1,12 +1,14 @@
+import 'package:kaawa/utils/date_utils.dart';
+
 
 class Message {
-  final int? id;
-  final int senderId;
-  final int receiverId;
+  final String? id;
+  final String senderId;
+  final String receiverId;
   final String text;
   final DateTime timestamp;
   final bool isRead;
-  final int? coffeeStockId;
+  final String? coffeeStockId;
   final bool isPurchaseRequest;
   final String? purchaseRequestData; // JSON encoded cart items
 
@@ -24,29 +26,29 @@ class Message {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'senderId': senderId,
-      'receiverId': receiverId,
+      if (id != null) 'id': id,
+      'sender_id': senderId,
+      'receiver_id': receiverId,
       'text': text,
-      'timestamp': timestamp.toIso8601String(),
-      'isRead': isRead ? 1 : 0,
-      'coffeeStockId': coffeeStockId,
-      'isPurchaseRequest': isPurchaseRequest ? 1 : 0,
-      'purchaseRequestData': purchaseRequestData,
+      'created_at': timestamp.toIso8601String(),
+      'is_read': isRead,
+      'coffee_stock_id': coffeeStockId,
+      'is_purchase_request': isPurchaseRequest,
+      'purchase_request_data': purchaseRequestData,
     };
   }
 
   factory Message.fromMap(Map<String, dynamic> map) {
     return Message(
-      id: map['id'],
-      senderId: map['senderId'],
-      receiverId: map['receiverId'],
-      text: map['text'],
-      timestamp: DateTime.parse(map['timestamp']),
-      isRead: map['isRead'] == 1,
-      coffeeStockId: map['coffeeStockId'],
-      isPurchaseRequest: (map['isPurchaseRequest'] ?? 0) == 1,
-      purchaseRequestData: map['purchaseRequestData'],
+      id: map['id']?.toString(),
+      senderId: map['sender_id'] ?? map['senderId']?.toString() ?? '',
+      receiverId: map['receiver_id'] ?? map['receiverId']?.toString() ?? '',
+      text: map['text'] ?? '',
+      timestamp: parseDateSafe(map['created_at'] ?? map['timestamp']) ?? DateTime.now(),
+      isRead: map['is_read'] == true || map['isRead'] == 1,
+      coffeeStockId: map['coffee_stock_id']?.toString() ?? map['coffeeStockId']?.toString(),
+      isPurchaseRequest: map['is_purchase_request'] == true || map['isPurchaseRequest'] == 1,
+      purchaseRequestData: map['purchase_request_data'] ?? map['purchaseRequestData'],
     );
   }
 }

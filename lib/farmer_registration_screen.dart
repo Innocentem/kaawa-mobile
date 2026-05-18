@@ -1,20 +1,20 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/login_screen.dart';
 
 class FarmerRegistrationScreen extends StatefulWidget {
   const FarmerRegistrationScreen({super.key});
 
   @override
-  State<FarmerRegistrationScreen> createState() => _FarmerRegistrationScreenState();
+  State<FarmerRegistrationScreen> createState() =>
+      _FarmerRegistrationScreenState();
 }
 
 class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _authService = AuthService();
   final _fullNameController = TextEditingController();
   final _phoneNumberController = TextEditingController();
   final _districtController = TextEditingController();
@@ -23,19 +23,71 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _isLoading = false;
   Position? _currentPosition;
 
   Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
     try {
+      // Test if location services are enabled.
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled.')),
+          );
+        }
+        return;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permissions are denied')),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Location permissions are permanently denied, we cannot request permissions.')),
+          );
+        }
+        return;
+      }
+
+      setState(() => _isLoading = true);
       final position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high);
       setState(() {
         _currentPosition = position;
+        _isLoading = false;
       });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not get location: $e')),
-      );
+      setState(() => _isLoading = false);
+      if (mounted) {
+        if (e is MissingPluginException) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Location is not available on this platform. Try on an Android/iOS device.')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not get location: $e')),
+          );
+        }
+      }
     }
   }
 
@@ -77,8 +129,11 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                 decoration: InputDecoration(
                   labelText: 'Password',
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(_obscurePassword
+                        ? Icons.visibility
+                        : Icons.visibility_off),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
                 ),
                 obscureText: _obscurePassword,
@@ -94,8 +149,11 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
                 decoration: InputDecoration(
                   labelText: 'Confirm Password',
                   suffixIcon: IconButton(
-                    icon: Icon(_obscureConfirm ? Icons.visibility : Icons.visibility_off),
-                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    icon: Icon(_obscureConfirm
+                        ? Icons.visibility
+                        : Icons.visibility_off),
+                    onPressed: () =>
+                        setState(() => _obscureConfirm = !_obscureConfirm),
                   ),
                 ),
                 obscureText: _obscureConfirm,
@@ -137,30 +195,58 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
-                    final newUser = User(
-                      fullName: _fullNameController.text,
-                      phoneNumber: _phoneNumberController.text,
-                      password: hashedPassword,
-                      district: _districtController.text,
-                      userType: UserType.farmer,
-                      village: _villageController.text,
-                      latitude: _currentPosition?.latitude,
-                      longitude: _currentPosition?.longitude,
-                    );
-                    await DatabaseHelper.instance.insertUser(newUser);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Registration successful!')),
-                    );
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (context) => const LoginScreen()),
-                    );
-                  }
-                },
-                child: const Text('Register'),
+                onPressed: _isLoading
+                    ? null
+                    : () async {
+                        if (_formKey.currentState!.validate()) {
+                          setState(() => _isLoading = true);
+                          try {
+                            final phone = _phoneNumberController.text.trim();
+                            final email = '$phone@kaawa.com';
+
+                            await _authService.signUp(
+                              email: email,
+                              password: _passwordController.text,
+                              fullName: _fullNameController.text,
+                              phoneNumber: phone,
+                              userType: 'farmer',
+                              district: _districtController.text,
+                            );
+
+                            // Note: We might want to save village/coords in a separate 'profiles' table
+                            // or in metadata. For now, following the buyer pattern.
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        'Registration successful! Please login.')),
+                              );
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) => const LoginScreen()),
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                    content: Text('Registration failed: $e')),
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isLoading = false);
+                          }
+                        }
+                      },
+                child: _isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white))
+                    : const Text('Register'),
               ),
             ],
           ),

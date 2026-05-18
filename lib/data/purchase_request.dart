@@ -1,4 +1,5 @@
 import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/utils/date_utils.dart';
 
 class PurchaseRequestItem {
   final int stockId;
@@ -99,11 +100,11 @@ class PurchaseRequest {
       farmerId: map['farmerId'] as int,
       items: _parseItems(map['itemsJson']),
       totalAmount: (map['totalAmount'] as num).toDouble(),
-      sentAt: DateTime.parse(map['sentAt'] as String),
+      sentAt: parseDateSafe(map['sentAt']) ?? DateTime.now(),
       buyerMessage: map['buyerMessage'] as String?,
       seenByFarmer: (map['seenByFarmer'] as int?) == 1,
       farmerResponse: map['farmerResponse'] as String?,
-      respondedAt: map['respondedAt'] != null ? DateTime.parse(map['respondedAt'] as String) : null,
+      respondedAt: parseDateSafe(map['respondedAt']),
     );
   }
 

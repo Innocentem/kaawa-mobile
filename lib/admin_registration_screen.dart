@@ -1,8 +1,5 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/login_screen.dart';
 import 'widgets/compact_loader.dart';
 
@@ -22,6 +19,7 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _authService = AuthService();
   bool _submitting = false;
   bool _obscurePassword = true;
 
@@ -39,54 +37,16 @@ class _AdminRegistrationScreenState extends State<AdminRegistrationScreen> {
     setState(() => _submitting = true);
 
     try {
-      // Check if a user with this phone already exists
-      final existing = await DatabaseHelper.instance.getUser(phone);
-      final hashed = sha256.convert(utf8.encode(password)).toString();
-
-      if (existing != null) {
-        // If already admin, we're done. Otherwise promote to admin and update password.
-        if (existing.userType == UserType.admin) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Admin account already exists')));
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
-          return;
-        } else {
-          final promoted = User(
-            id: existing.id,
-            fullName: existing.fullName.isNotEmpty ? existing.fullName : 'Kaawa Admin',
-            phoneNumber: existing.phoneNumber,
-            district: existing.district.isNotEmpty ? existing.district : 'HQ',
-            password: hashed,
-            userType: UserType.admin,
-            mustChangePassword: true,
-            profilePicturePath: existing.profilePicturePath,
-            latitude: existing.latitude,
-            longitude: existing.longitude,
-            village: existing.village,
-          );
-          await DatabaseHelper.instance.updateUser(promoted);
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account promoted to admin')));
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
-          return;
-        }
-      }
-
-      // Create a minimal admin user (fill required fields with sensible defaults)
-      final newUser = User(
+      final email = '$phone@kaawa.com';
+      await _authService.signUp(
+        email: email,
+        password: password,
         fullName: 'Kaawa Admin',
         phoneNumber: phone,
+        userType: 'admin',
         district: 'HQ',
-        password: hashed,
-        userType: UserType.admin,
-        mustChangePassword: true,
       );
 
-      await DatabaseHelper.instance.insertUser(newUser);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Admin registered successfully')));
       Navigator.pushReplacement(
         context,

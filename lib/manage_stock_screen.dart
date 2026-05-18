@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
-import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/supabase_service.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/interested_buyers_screen.dart';
 import 'package:kaawa/widgets/listing_image.dart';
 import 'package:kaawa/widgets/listing_carousel.dart';
@@ -14,7 +14,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ManageStockScreen extends StatefulWidget {
-  final User farmer;
+  final kaawa.User farmer;
 
   const ManageStockScreen({super.key, required this.farmer});
 
@@ -23,7 +23,7 @@ class ManageStockScreen extends StatefulWidget {
 }
 
 class _ManageStockScreenState extends State<ManageStockScreen> {
-  late Future<List<CoffeeStock>> _stockFuture;
+  late Stream<List<CoffeeStock>> _stockStream;
   final LayerLink _editLink = LayerLink();
   final GlobalKey _editKey = GlobalKey();
   bool _guideScheduled = false;
@@ -56,11 +56,13 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
   @override
   void initState() {
     super.initState();
-    _stockFuture = _getCoffeeStock();
+    _stockStream = _supabaseService.getCoffeeStockStreamByFarmer(widget.farmer.id!);
   }
 
+  final SupabaseService _supabaseService = SupabaseService.instance;
+
   Future<List<CoffeeStock>> _getCoffeeStock() async {
-    return await DatabaseHelper.instance.getCoffeeStock(widget.farmer.id!);
+    return await _supabaseService.getCoffeeStockByFarmer(widget.farmer.id!);
   }
 
   void _showStockDialog({CoffeeStock? stock}) {
@@ -69,11 +71,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       builder: (context) {
         return _StockDialog(farmerId: widget.farmer.id!, stock: stock);
       },
-    ).then((_) {
-      setState(() {
-        _stockFuture = _getCoffeeStock();
-      });
-    });
+    );
   }
 
   Future<void> _toggleSoldStatus(CoffeeStock stock) async {
@@ -87,10 +85,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       description: stock.description,
       isSold: !stock.isSold,
     );
-    await DatabaseHelper.instance.updateCoffeeStock(newStock);
-    setState(() {
-      _stockFuture = _getCoffeeStock();
-    });
+    await SupabaseService.instance.updateCoffeeStock(newStock);
   }
 
   Future<void> _scheduleEditGuide() async {
@@ -220,8 +215,8 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<CoffeeStock>>(
-              future: _stockFuture,
+            child: StreamBuilder<List<CoffeeStock>>(
+              stream: _stockStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: SizedBox(width: double.infinity, height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading listings'))));
@@ -276,7 +271,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     FutureBuilder<int>(
-                                      future: DatabaseHelper.instance.getInterestCountForStock(stock.id!),
+                                      future: SupabaseService.instance.getInterestCountForStock(stock.id!),
                                       builder: (context, snapshotCount) {
                                         final count = snapshotCount.data ?? 0;
                                         return Tooltip(
@@ -356,7 +351,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
 }
 
 class _StockDialog extends StatefulWidget {
-  final int farmerId;
+  final String farmerId;
   final CoffeeStock? stock;
 
   const _StockDialog({required this.farmerId, this.stock});
@@ -467,23 +462,71 @@ class _StockDialogState extends State<_StockDialog> {
           ? _otherCoffeeTypeController.text.trim()
           : (_selectedCoffeeType ?? '');
 
+      String? finalImagePath = _coffeePicturePath;
+      if (_coffeePicturePath != null) {
+        final paths = _coffeePicturePath!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+        final uploadedUrls = <String>[];
+
+        for (final p in paths) {
+          if (p.startsWith('/') || p.startsWith('file:')) {
+            final file = File(p);
+            if (await file.exists()) {
+              final publicUrl = await SupabaseService.instance.uploadImage(
+                'kaawa-media',
+                'stock/${widget.farmerId}',
+                file,
+              );
+              if (publicUrl != null) {
+                uploadedUrls.add(publicUrl);
+              } else {
+                uploadedUrls.add(p); // Fallback to local if upload failed (not ideal)
+              }
+            } else {
+              uploadedUrls.add(p);
+            }
+          } else {
+            uploadedUrls.add(p);
+          }
+        }
+        finalImagePath = uploadedUrls.join(',');
+      }
+
       final newStock = CoffeeStock(
         id: widget.stock?.id,
         farmerId: widget.farmerId,
         coffeeType: coffeeType,
         quantity: double.parse(_quantityController.text),
         pricePerKg: double.parse(_pricePerKgController.text),
-        coffeePicturePath: _coffeePicturePath,
+        coffeePicturePath: finalImagePath,
         description: _descriptionController.text,
       );
 
-      if (widget.stock == null) {
-        await DatabaseHelper.instance.insertCoffeeStock(newStock);
-      } else {
-        await DatabaseHelper.instance.updateCoffeeStock(newStock);
+      // Cleanup orphaned images from Supabase storage
+      if (widget.stock != null && widget.stock!.coffeePicturePath != null) {
+        final oldPaths = widget.stock!.coffeePicturePath!.split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        final newPaths = finalImagePath?.split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList() ?? [];
+
+        for (final oldPath in oldPaths) {
+          // If the old URL is a Supabase public URL and it's no longer in our list, delete it.
+          if (oldPath.contains('supabase.co/storage/v1/object/public/') && !newPaths.contains(oldPath)) {
+            await SupabaseService.instance.deleteImage('kaawa-media', oldPath);
+          }
+        }
       }
 
-      Navigator.pop(context);
+      if (widget.stock == null) {
+        await SupabaseService.instance.insertCoffeeStock(newStock);
+      } else {
+        await SupabaseService.instance.updateCoffeeStock(newStock);
+      }
+
+      if (mounted) Navigator.pop(context);
     }
   }
 
@@ -610,24 +653,53 @@ class _StockDialogState extends State<_StockDialog> {
   }
 
   Widget _buildImagePicker() {
+    final theme = Theme.of(context);
+    final hasImages = _coffeePicturePath != null && _coffeePicturePath!.trim().isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Coffee Picture', style: TextStyle(fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Coffee Pictures', style: TextStyle(fontWeight: FontWeight.bold)),
+            if (hasImages)
+              TextButton.icon(
+                onPressed: () => setState(() => _coffeePicturePath = null),
+                icon: const Icon(Icons.delete_sweep, size: 18, color: Colors.red),
+                label: const Text('Clear All', style: TextStyle(color: Colors.red)),
+              ),
+          ],
+        ),
         const SizedBox(height: 8),
-        if (_coffeePicturePath != null)
+        if (hasImages)
           SizedBox(
-            height: 150,
+            height: 180,
             width: double.infinity,
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               child: ListingCarousel(images: _parseImages(_coffeePicturePath), fit: BoxFit.cover),
             ),
+          )
+        else
+          Container(
+            height: 100,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceVariant.withAlpha(100),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: const Center(child: Text('No images selected')),
           ),
-        TextButton.icon(
-          icon: const Icon(Icons.image),
-          label: Text(_coffeePicturePath == null ? 'Select Image' : 'Change Image'),
-          onPressed: () => _pickImage(ImageSource.gallery),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.add_a_photo),
+            label: Text(hasImages ? 'Add More' : 'Select Images'),
+            onPressed: () => _pickImage(ImageSource.gallery),
+          ),
         ),
       ],
     );

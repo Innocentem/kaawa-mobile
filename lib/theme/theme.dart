@@ -5,9 +5,10 @@ const String _kThemePrefKey = 'theme_mode_pref';
 
 class ThemeNotifier extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.system;
+  late final Future<void> isReady;
 
   ThemeNotifier() {
-    _loadFromPrefs();
+    isReady = _loadFromPrefs();
   }
 
   ThemeMode get themeMode => _themeMode;

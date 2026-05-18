@@ -1,12 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/theme/theme.dart';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:kaawa/welcome_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // On desktop platforms initialize the ffi implementation and set the
+  // global `databaseFactory` so `sqflite`'s `openDatabase` works.
+  if (!kIsWeb && (Platform.isLinux || Platform.isWindows || Platform.isMacOS)) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
+
+  await Supabase.initialize(
+    url: 'https://buluwzoktzotgqrmhewo.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1bHV3em9rdHpvdGdxcm1oZXdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkwNDAyNTksImV4cCI6MjA5NDYxNjI1OX0.FsEQyJqyaYM1gfL4nhu34cmoko0SqHv3JbVRdiBp0eo',
+  );
+
+  final themeNotifier = ThemeNotifier();
+  await themeNotifier.isReady;
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeNotifier(),
+    ChangeNotifierProvider.value(
+      value: themeNotifier,
       child: const MyApp(),
     ),
   );

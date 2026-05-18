@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:kaawa/data/coffee_stock_data.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/message_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
-  final User currentUser;
-  final User otherUser;
+  final kaawa.User currentUser;
+  final kaawa.User otherUser;
   final String? initialMessage;
   final CoffeeStock? coffeeStock;
 
@@ -27,32 +27,19 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
-  late Future<List<Message>> _messagesFuture;
+  final _scrollController = ScrollController();
+  late Stream<List<Message>> _messagesStream;
   CoffeeStock? _coffeeStock;
 
   @override
   void initState() {
     super.initState();
     _coffeeStock = widget.coffeeStock;
-    _messagesFuture = _getMessages();
+    _messagesStream = SupabaseService.instance.getMessagesStream(widget.currentUser.id!, widget.otherUser.id!);
     if (widget.initialMessage != null) {
       _messageController.text = widget.initialMessage!;
     }
-    DatabaseHelper.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
-  }
-
-  Future<List<Message>> _getMessages() async {
-    final messages = await DatabaseHelper.instance.getMessages(widget.currentUser.id!, widget.otherUser.id!);
-    if (_coffeeStock == null && messages.isNotEmpty) {
-      final firstMessage = messages.first;
-      if (firstMessage.coffeeStockId != null) {
-        final stock = await DatabaseHelper.instance.getCoffeeStockById(firstMessage.coffeeStockId!);
-        setState(() {
-          _coffeeStock = stock;
-        });
-      }
-    }
-    return messages;
+    SupabaseService.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
   }
 
   Future<void> _sendMessage() async {
@@ -65,12 +52,10 @@ class _ChatScreenState extends State<ChatScreen> {
         coffeeStockId: _coffeeStock?.id,
       );
 
-      await DatabaseHelper.instance.insertMessage(message);
+      await SupabaseService.instance.sendMessage(message);
 
       _messageController.clear();
-      setState(() {
-        _messagesFuture = _getMessages();
-      });
+      // No need to manually refresh _messagesStream as it's a real-time stream
     }
   }
 
@@ -265,8 +250,8 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           Expanded(
-            child: FutureBuilder<List<Message>>(
-              future: _messagesFuture,
+            child: StreamBuilder<List<Message>>(
+              stream: _messagesStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading messages'))));
@@ -274,10 +259,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: Text('Error loading messages.'));
                 } else {
                   final messages = snapshot.data ?? [];
+                  
+                  // Mark as read when new messages arrive from the other user
+                  if (messages.isNotEmpty) {
+                    final newestMessage = messages.last;
+                    if (newestMessage.senderId == widget.otherUser.id && !newestMessage.isRead) {
+                      SupabaseService.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
+                    }
+                  }
+
                   return ListView.builder(
+                    reverse: true,
+                    controller: _scrollController,
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
-                      final message = messages[index];
+                      // index 0 is at the bottom (newest in a reversed view)
+                      // so we take messages.last - index
+                      final message = messages[messages.length - 1 - index];
                       final isMe = message.senderId == widget.currentUser.id;
 
                       if (message.isPurchaseRequest && message.purchaseRequestData != null) {

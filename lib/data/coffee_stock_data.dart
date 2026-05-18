@@ -1,6 +1,6 @@
 class CoffeeStock {
-  final int? id;
-  final int farmerId;
+  final String? id;
+  final String farmerId;
   final String coffeeType;
   final double quantity;
   final double pricePerKg;
@@ -21,27 +21,29 @@ class CoffeeStock {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'farmerId': farmerId,
-      'coffeeType': coffeeType,
+      if (id != null) 'id': id,
+      'farmer_id': farmerId,
+      'coffee_type': coffeeType,
       'quantity': quantity,
-      'pricePerKg': pricePerKg,
-      'coffeePicturePath': coffeePicturePath,
+      'price_per_kg': pricePerKg,
+      'coffee_picture_url': coffeePicturePath,
       'description': description,
-      'isSold': isSold ? 1 : 0,
+      'is_sold': isSold,
     };
   }
 
   factory CoffeeStock.fromMap(Map<String, dynamic> map) {
     return CoffeeStock(
-      id: map['id'],
-      farmerId: map['farmerId'],
-      coffeeType: map['coffeeType'],
-      quantity: map['quantity'] is int ? (map['quantity'] as int).toDouble() : map['quantity'],
-      pricePerKg: map['pricePerKg'] is int ? (map['pricePerKg'] as int).toDouble() : map['pricePerKg'],
-      coffeePicturePath: map['coffeePicturePath'],
+      id: map['id']?.toString(),
+      farmerId: map['farmer_id'] ?? map['farmerId']?.toString() ?? '',
+      coffeeType: map['coffee_type'] ?? map['coffeeType'] ?? '',
+        quantity: map['quantity'] is num ? (map['quantity'] as num).toDouble() : 0.0,
+        pricePerKg: map['price_per_kg'] is num
+          ? (map['price_per_kg'] as num).toDouble()
+          : (map['pricePerKg'] is num ? (map['pricePerKg'] as num).toDouble() : 0.0),
+      coffeePicturePath: map['coffee_picture_url'] ?? map['coffeePicturePath'],
       description: map['description'] ?? '',
-      isSold: map['isSold'] == 1,
+      isSold: map['is_sold'] == true || map['is_sold'] == 1 || map['isSold'] == 1 || map['isSold'] == true,
     );
   }
 }

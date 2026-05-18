@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:intl/intl.dart';
+import 'package:kaawa/utils/date_utils.dart';
 import 'widgets/compact_loader.dart';
 
 class ActivityLogScreen extends StatefulWidget {
-  final int userId;
+  final String userId;
   const ActivityLogScreen({super.key, required this.userId});
 
   @override
@@ -17,17 +18,14 @@ class _ActivityLogScreenState extends State<ActivityLogScreen> {
   @override
   void initState() {
     super.initState();
-    _logFuture = DatabaseHelper.instance.getUserActivityLog(widget.userId);
+    _logFuture = SupabaseService.instance.getUserActivityLog(widget.userId);
   }
 
   String _formatTs(String? iso) {
     if (iso == null) return '';
-    try {
-      final dt = DateTime.parse(iso);
-      return DateFormat.yMMMd().add_jm().format(dt);
-    } catch (_) {
-      return iso;
-    }
+    final dt = parseDateSafe(iso);
+    if (dt != null) return DateFormat.yMMMd().add_jm().format(dt);
+    return iso;
   }
 
   @override

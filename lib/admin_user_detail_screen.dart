@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/user_data.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
+import 'package:kaawa/data/supabase_service.dart';
 import '../widgets/compact_loader.dart';
 import 'admin/admin_user_listings_screen.dart';
 import 'admin/admin_conversations_list_screen.dart';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/view_reviews_screen.dart';
 import 'package:kaawa/profile_screen.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
-  final User user;
-  final User admin;
+  final kaawa.User user;
+  final kaawa.User admin;
   const AdminUserDetailScreen({super.key, required this.user, required this.admin});
 
   @override
@@ -21,18 +19,18 @@ class AdminUserDetailScreen extends StatefulWidget {
 
 class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
   late Future<Map<String, dynamic>> _activityFuture;
-  late User _user;
+  late kaawa.User _user;
 
   @override
   void initState() {
     super.initState();
     _user = widget.user;
-    _activityFuture = DatabaseHelper.instance.getUserActivitySummary(widget.user.id!);
+    _activityFuture = SupabaseService.instance.getUserActivitySummary(widget.user.id!);
     _reloadUser();
   }
 
   Future<void> _reloadUser() async {
-    final fresh = await DatabaseHelper.instance.getUserById(widget.user.id!);
+    final fresh = await SupabaseService.instance.getProfile(widget.user.id!);
     if (fresh == null) return;
     if (!mounted) return;
     setState(() => _user = fresh);
@@ -40,13 +38,13 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 
   Future<void> _suspend(Duration d) async {
     final until = DateTime.now().add(d);
-    await DatabaseHelper.instance.suspendUser(widget.user.id!, until);
+    await SupabaseService.instance.suspendUser(widget.user.id!, until);
     await _reloadUser();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('User suspended until ${until.toLocal()}')));
   }
 
   Future<void> _unsuspend() async {
-    await DatabaseHelper.instance.unsuspendUser(widget.user.id!);
+    await SupabaseService.instance.unsuspendUser(widget.user.id!);
     await _reloadUser();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User unsuspended')));
   }
@@ -86,8 +84,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
       return;
     }
 
-    final hash = sha256.convert(utf8.encode(tempPassword)).toString();
-    final ok = await DatabaseHelper.instance.adminSetUserPasswordById(widget.user.id!, hash);
+    final ok = await SupabaseService.instance.adminSetUserPassword(widget.user.id!, tempPassword);
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to reset password.')));
       return;
@@ -301,7 +298,7 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 
     if (confirmed == true) {
       final reason = reasonController.text.trim().isEmpty ? null : reasonController.text.trim();
-      await DatabaseHelper.instance.suspendUserWithReason(widget.user.id!, until, reason);
+      await SupabaseService.instance.suspendUser(widget.user.id!, until, reason: reason);
       await _reloadUser();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('User suspended until ${until.toLocal()}')));
     }

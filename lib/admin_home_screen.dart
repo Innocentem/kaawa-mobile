@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/admin_user_list_screen.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/admin_password_resets_screen.dart';
 import 'package:kaawa/conversations_screen.dart';
 import 'package:kaawa/widgets/icon_action_tile.dart';
@@ -9,7 +10,7 @@ import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/welcome_screen.dart';
 
 class AdminHomeScreen extends StatefulWidget {
-  final User admin;
+  final kaawa.User admin;
   const AdminHomeScreen({super.key, required this.admin});
 
   @override
@@ -20,23 +21,25 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _pendingResets = 0;
   int _unreadMessageCount = 0;
   final AuthService _authService = AuthService();
+  StreamSubscription<int>? _resetSubscription;
+  StreamSubscription<int>? _messageSubscription;
 
   @override
   void initState() {
     super.initState();
-    _loadPending();
-    _loadUnreadMessages();
+    _resetSubscription = SupabaseService.instance.getPendingPasswordResetCountStream().listen((count) {
+      if (mounted) setState(() => _pendingResets = count);
+    });
+    _messageSubscription = SupabaseService.instance.getUnreadMessageCountStream(widget.admin.id!).listen((count) {
+      if (mounted) setState(() => _unreadMessageCount = count);
+    });
   }
 
-  Future<void> _loadPending() async {
-    final rows = await DatabaseHelper.instance.getPendingPasswordResetRequests();
-    setState(() => _pendingResets = rows.length);
-  }
-
-  Future<void> _loadUnreadMessages() async {
-    final count = await DatabaseHelper.instance.getUnreadMessageCount(widget.admin.id!);
-    if (!mounted) return;
-    setState(() => _unreadMessageCount = count);
+  @override
+  void dispose() {
+    _resetSubscription?.cancel();
+    _messageSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _handleLogoutRequest() async {
@@ -110,23 +113,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     label: 'Resets',
                     tooltip: 'Pending password resets',
                     badgeText: '$_pendingResets',
-                    onTap: () async {
-                      await Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminPasswordResetsScreen()));
-                      await _loadPending();
-                    },
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const AdminPasswordResetsScreen())),
                   ),
                   IconActionTile(
                     icon: Icons.message,
                     label: 'Messages',
                     tooltip: 'View conversations',
                     badgeText: '$_unreadMessageCount',
-                    onTap: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
-                      );
-                      await _loadUnreadMessages();
-                    },
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (c) => ConversationsScreen(currentUser: widget.admin)),
+                    ),
                   ),
                 ],
               ),

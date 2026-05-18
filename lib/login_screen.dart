@@ -1,15 +1,13 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:kaawa/auth_service.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/farmer_home_screen.dart';
 import 'package:kaawa/buyer_home_screen.dart';
-import 'package:kaawa/data/database_helper.dart';
 import 'package:kaawa/forgot_password_screen.dart';
 import 'package:kaawa/contact_admin_screen.dart';
 import 'package:kaawa/change_password_screen.dart';
 import 'package:kaawa/admin_home_screen.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,7 +22,70 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _showResetBanner = false;
   bool _obscurePassword = true;
+  bool _isLoading = false;
   final AuthService _authService = AuthService();
+
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final phone = _phoneNumberController.text.trim();
+      final password = _passwordController.text;
+      final email = '$phone@kaawa.com';
+
+      final response = await _authService.signIn(email: email, password: password);
+      final sbUser = response.user;
+
+      if (sbUser != null) {
+        final metadata = sbUser.userMetadata ?? {};
+        final userTypeStr = metadata['user_type'] ?? 'buyer';
+        final fullName = metadata['full_name'] ?? 'User';
+        final district = metadata['district'] ?? '';
+
+        // Map Supabase metadata to our User model
+        final user = kaawa.User(
+          id: sbUser.id,
+          fullName: fullName,
+          phoneNumber: phone,
+          district: district,
+          password: '', // Password is not stored locally anymore
+          userType: kaawa.UserType.values.firstWhere(
+            (e) => e.name == userTypeStr,
+            orElse: () => kaawa.UserType.buyer,
+          ),
+        );
+
+        if (mounted) {
+          // Navigate to the correct home screen based on user type
+          if (user.userType == kaawa.UserType.farmer) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => FarmerHomeScreen(farmer: user)),
+            );
+          } else if (user.userType == kaawa.UserType.admin) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (c) => AdminHomeScreen(admin: user)),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => BuyerHomeScreen(buyer: user)),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Login failed: ${e.toString()}')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
         padding: const EdgeInsets.all(16.0),
         child: Form(
           key: _formKey,
-          child: Column(
+          child: ListView(
             children: <Widget>[
               if (_showResetBanner)
                 MaterialBanner(
@@ -91,90 +152,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 ],
               ),
               ElevatedButton(
-                onPressed: () async {
-                  if (_formKey.currentState!.validate()) {
-                    final phoneNumber = _phoneNumberController.text.trim();
-                    final user = await DatabaseHelper.instance.getUser(phoneNumber);
-
-                    if (user != null) {
-                      setState(() {
-                        _showResetBanner = user.mustChangePassword;
-                      });
-                      if (user.isSuspended) {
-                        final remaining = user.suspensionRemainingText;
-                        await showDialog<void>(
-                          context: context,
-                          builder: (c) => AlertDialog(
-                            title: const Text('Account suspended'),
-                            content: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
-                                if (remaining != null) ...[
-                                  const SizedBox(height: 6),
-                                  Text('Time left: $remaining'),
-                                ],
-                                const SizedBox(height: 8),
-                                if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
-                                  Text('Reason: ${user.suspensionReason}'),
-                                const SizedBox(height: 12),
-                                const Text('If you believe this is a mistake, contact admin.'),
-                              ],
-                            ),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-                              TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (ctx) => ContactAdminScreen(currentUser: user))), child: const Text('Contact Admin')),
-                            ],
-                          ),
-                        );
-                        return;
-                      }
-
-                      final hashedPassword = sha256.convert(utf8.encode(_passwordController.text)).toString();
-                      if (user.password == hashedPassword) {
-                        await _authService.login(user.id!);
-                        if (user.mustChangePassword) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (c) => ChangePasswordScreen(user: user)),
-                          );
-                          return;
-                        }
-                        // Navigate to the correct home screen based on user type
-                        if (user.userType == UserType.farmer) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => FarmerHomeScreen(farmer: user),
-                            ),
-                          );
-                        } else if (user.userType == UserType.admin) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (c) => AdminHomeScreen(admin: user)),
-                          );
-                        } else {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => BuyerHomeScreen(buyer: user),
-                            ),
-                          );
-                        }
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Incorrect password.')),
-                        );
-                      }
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('No user found with that phone number.')),
-                      );
-                    }
-                  }
-                },
-                child: const Text('Login'),
+                onPressed: _isLoading ? null : _handleLogin,
+                child: _isLoading 
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Login'),
               ),
             ],
           ),

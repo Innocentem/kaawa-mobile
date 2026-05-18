@@ -29,9 +29,17 @@ class AppAvatar extends StatelessWidget {
     Widget content;
 
     try {
-      if (filePath != null && File(filePath!).existsSync()) {
-        content = Image.file(File(filePath!), width: size, height: size, fit: fit);
-      } else if (imageUrl != null && imageUrl!.isNotEmpty && (imageUrl!.startsWith('http') || imageUrl!.startsWith('https'))) {
+      final isLocalFilePath = filePath != null &&
+          !filePath!.startsWith('http') &&
+          !filePath!.startsWith('https') &&
+          File(filePath!).existsSync();
+
+      if (isLocalFilePath) {
+        content =
+            Image.file(File(filePath!), width: size, height: size, fit: fit);
+      } else if (imageUrl != null &&
+          imageUrl!.isNotEmpty &&
+          (imageUrl!.startsWith('http') || imageUrl!.startsWith('https'))) {
         content = CachedNetworkImage(
           imageUrl: imageUrl!,
           width: size,
@@ -46,14 +54,17 @@ class AppAvatar extends StatelessWidget {
             return Shimmer.fromColors(
               baseColor: base,
               highlightColor: highlight,
-              child: Container(width: size, height: size, color: theme.colorScheme.surface),
+              child: Container(
+                  width: size, height: size, color: theme.colorScheme.surface),
             );
           },
           // fallback if network fails
-          errorWidget: (context, url, error) => Image.asset(fallbackAsset, width: size, height: size, fit: fit),
+          errorWidget: (context, url, error) =>
+              Image.asset(fallbackAsset, width: size, height: size, fit: fit),
         );
       } else {
-        content = Image.asset(fallbackAsset, width: size, height: size, fit: fit);
+        content =
+            Image.asset(fallbackAsset, width: size, height: size, fit: fit);
       }
     } catch (_) {
       content = Image.asset(fallbackAsset, width: size, height: size, fit: fit);

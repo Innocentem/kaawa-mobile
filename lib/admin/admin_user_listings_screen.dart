@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
 import '../../widgets/compact_loader.dart';
 
 class AdminUserListingsScreen extends StatefulWidget {
-  final int userId;
+  final String userId;
   const AdminUserListingsScreen({super.key, required this.userId});
 
   @override
@@ -17,7 +17,7 @@ class _AdminUserListingsScreenState extends State<AdminUserListingsScreen> {
   @override
   void initState() {
     super.initState();
-    _listingsFuture = DatabaseHelper.instance.getCoffeeStock(widget.userId);
+    _listingsFuture = SupabaseService.instance.getCoffeeStockByFarmer(widget.userId);
   }
 
   @override
@@ -39,7 +39,7 @@ class _AdminUserListingsScreenState extends State<AdminUserListingsScreen> {
                 title: Text(s.coffeeType),
                 subtitle: Text('Qty: ${s.quantity}kg • UGX ${s.pricePerKg}/kg'),
                 trailing: FutureBuilder<int>(
-                  future: DatabaseHelper.instance.getInterestCountForStock(s.id!),
+                  future: SupabaseService.instance.getInterestCountForStock(s.id!),
                   builder: (c, snap2) => Text('${snap2.data ?? 0} interests'),
                 ),
               );

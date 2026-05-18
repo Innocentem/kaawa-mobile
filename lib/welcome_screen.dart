@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/buyer_home_screen.dart';
 import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/farmer_home_screen.dart';
 import 'package:kaawa/farmer_registration_screen.dart';
 import 'package:kaawa/buyer_registration_screen.dart';
@@ -32,77 +32,31 @@ class _InitialScreenState extends State<InitialScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
-    final isLoggedIn = await _authService.isLoggedIn();
-    if (isLoggedIn) {
-      final userId = await _authService.getUserId();
-      if (userId != null) {
-        final user = await DatabaseHelper.instance.getUserById(userId);
-        if (user != null) {
-          // Block auto-login when user is suspended
-          if (user.isSuspended) {
-            final remaining = user.suspensionRemainingText;
-            // clear stored login and inform user
-            await _authService.logout();
-            // show suspension dialog on the next frame so context is ready
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              showDialog<void>(
-                context: context,
-                builder: (c) => AlertDialog(
-                  title: const Text('Account suspended'),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Your account is suspended until ${user.suspendedUntil!.toLocal()}.'),
-                      if (remaining != null) ...[
-                        const SizedBox(height: 6),
-                        Text('Time left: $remaining'),
-                      ],
-                      const SizedBox(height: 8),
-                      if (user.suspensionReason != null && user.suspensionReason!.isNotEmpty)
-                        Text('Reason: ${user.suspensionReason}'),
-                      const SizedBox(height: 12),
-                      const Text('If you believe this is a mistake, contact admin.'),
-                    ],
-                  ),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
-                    TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (ctx) => const ContactAdminScreen())), child: const Text('Contact Admin')),
-                  ],
-                ),
-              );
-            });
-
-            return; // do not navigate into the app
-          }
-
-          // Check if the user needs to change their password
-          if (user.mustChangePassword) {
-            // Navigate to the change password screen
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => ChangePasswordScreen(user: user)),
-            );
-            return;
-          }
-
-          if (user.userType == UserType.farmer) {
-            Navigator.pushReplacement(
+    if (_authService.isLoggedIn) {
+      final user = _authService.currentUserData;
+      if (user != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (user.userType == kaawa.UserType.farmer) {
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => FarmerHomeScreen(farmer: user)),
+              (route) => false,
             );
-          } else if (user.userType == UserType.admin) {
-            Navigator.pushReplacement(
+          } else if (user.userType == kaawa.UserType.admin) {
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => AdminHomeScreen(admin: user)),
+              (route) => false,
             );
           } else {
-            Navigator.pushReplacement(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (context) => BuyerHomeScreen(buyer: user)),
+              (route) => false,
             );
           }
-        }
+        });
       }
     }
   }

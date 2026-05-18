@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'widgets/compact_loader.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
@@ -20,7 +20,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       return;
     }
     setState(() => _loading = true);
-    await DatabaseHelper.instance.insertPasswordResetRequest(phone);
+    await SupabaseService.instance.insertPasswordResetRequest(phone);
     setState(() => _loading = false);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset request sent. Admin will handle it.')));
     Navigator.of(context).pop();

@@ -3,7 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'widgets/compact_loader.dart';
 
 class AdminPasswordResetsScreen extends StatefulWidget {
@@ -19,12 +19,12 @@ class _AdminPasswordResetsScreenState extends State<AdminPasswordResetsScreen> {
   @override
   void initState() {
     super.initState();
-    _future = DatabaseHelper.instance.getPendingPasswordResetRequests();
+    _future = SupabaseService.instance.getPendingPasswordResetRequests();
   }
 
   Future<void> _refresh() async {
     setState(() {
-      _future = DatabaseHelper.instance.getPendingPasswordResetRequests();
+      _future = SupabaseService.instance.getPendingPasswordResetRequests();
     });
   }
 
@@ -65,17 +65,24 @@ class _AdminPasswordResetsScreenState extends State<AdminPasswordResetsScreen> {
     );
   }
 
-  Future<void> _handleReset(int id, String phoneNumber) async {
+  Future<void> _handleReset(String id, String phoneNumber) async {
     final tempPassword = _generateTempPassword();
-    final hashed = sha256.convert(utf8.encode(tempPassword)).toString();
-    final ok = await DatabaseHelper.instance.adminSetUserPasswordByPhone(phoneNumber, hashed);
+    // In Supabase, we can't easily hash and set password from client without service role.
+    // For now, we update the profile to flag 'must_change_password'.
+    // In a real app, you'd use a Supabase Edge Function or similar.
+    
+    // First find user by phone to get their ID if needed, or just use phone if unique
+    final profiles = await SupabaseService.instance.getAllProfiles();
+    final userProfile = profiles.firstWhere((u) => u.phoneNumber == phoneNumber);
+    
+    final ok = await SupabaseService.instance.adminSetUserPassword(userProfile.id!, tempPassword);
     if (!ok) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('User not found')));
       return;
     }
 
-    await DatabaseHelper.instance.markPasswordResetHandled(id, adminName: 'admin');
+    await SupabaseService.instance.markPasswordResetHandled(id);
     if (!mounted) return;
     await _showTempPasswordDialog(phoneNumber, tempPassword);
     await _refresh();
@@ -102,10 +109,10 @@ class _AdminPasswordResetsScreenState extends State<AdminPasswordResetsScreen> {
               itemBuilder: (context, i) {
                 final r = rows[i];
                 return ListTile(
-                  title: Text(r['phoneNumber'] ?? ''),
-                  subtitle: Text('Requested: ${r['requestedAt'] ?? ''}'),
+                  title: Text(r['phone_number'] ?? ''),
+                  subtitle: Text('Requested: ${r['created_at'] ?? ''}'),
                   trailing: ElevatedButton(
-                    onPressed: () => _handleReset(r['id'] as int, r['phoneNumber'] as String),
+                    onPressed: () => _handleReset(r['id'].toString(), r['phone_number'] as String),
                     child: const Text('Reset'),
                   ),
                 );

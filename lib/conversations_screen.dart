@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/supabase_service.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/data/conversation_data.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
 class ConversationsScreen extends StatefulWidget {
-  final User currentUser;
+  final kaawa.User currentUser;
 
   const ConversationsScreen({super.key, required this.currentUser});
 
@@ -16,16 +16,12 @@ class ConversationsScreen extends StatefulWidget {
 }
 
 class _ConversationsScreenState extends State<ConversationsScreen> {
-  late Future<List<Conversation>> _conversationsFuture;
+  late Stream<List<Conversation>> _conversationsStream;
 
   @override
   void initState() {
     super.initState();
-    _conversationsFuture = _getConversations();
-  }
-
-  Future<List<Conversation>> _getConversations() async {
-    return await DatabaseHelper.instance.getConversations(widget.currentUser.id!);
+    _conversationsStream = SupabaseService.instance.getConversationsStream(widget.currentUser.id!);
   }
 
   @override
@@ -34,8 +30,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       appBar: AppBar(
         title: const Text('Messages'),
       ),
-      body: FutureBuilder<List<Conversation>>(
-        future: _conversationsFuture,
+      body: StreamBuilder<List<Conversation>>(
+        stream: _conversationsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: SizedBox(height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading conversations'))));
@@ -70,6 +66,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                               lastMessage.text,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontWeight: lastMessage.isRead || lastMessage.senderId == widget.currentUser.id 
+                                    ? FontWeight.normal 
+                                    : FontWeight.bold,
+                              ),
                             ),
                             if (coffeeStock != null)
                               Text(
@@ -80,7 +81,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                               ),
                           ],
                         ),
-                        trailing: lastMessage.isRead
+                        trailing: (lastMessage.isRead || lastMessage.senderId == widget.currentUser.id)
                             ? null
                             : Icon(Icons.circle, color: Theme.of(context).colorScheme.error, size: 12),
                         onTap: () {
@@ -93,11 +94,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                                 coffeeStock: coffeeStock,
                               ),
                             ),
-                          ).then((_) {
-                            setState(() {
-                              _conversationsFuture = _getConversations();
-                            });
-                          });
+                          );
                         },
                       );
                     },

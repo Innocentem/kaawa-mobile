@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/message_data.dart';
 import 'package:kaawa/data/user_data.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import '../../widgets/compact_loader.dart';
 
 class AdminConversationScreen extends StatefulWidget {
-  final int userId;
-  final int otherUserId;
+  final String userId;
+  final String otherUserId;
   const AdminConversationScreen({super.key, required this.userId, required this.otherUserId});
 
   @override
@@ -27,10 +27,10 @@ class _AdminConversationScreenState extends State<AdminConversationScreen> {
 
   Future<List<Message>> _loadConversation() async {
     // load both users for display
-    _user = await DatabaseHelper.instance.getUserById(widget.userId);
-    _otherUser = await DatabaseHelper.instance.getUserById(widget.otherUserId);
+    _user = await SupabaseService.instance.getProfile(widget.userId);
+    _otherUser = await SupabaseService.instance.getProfile(widget.otherUserId);
     // fetch full two-way thread
-    final msgs = await DatabaseHelper.instance.getMessages(widget.userId, widget.otherUserId);
+    final msgs = await SupabaseService.instance.getMessages(widget.userId, widget.otherUserId);
     return msgs;
   }
 

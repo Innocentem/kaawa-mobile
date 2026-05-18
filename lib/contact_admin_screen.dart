@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/database_helper.dart';
-import 'package:kaawa/data/user_data.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/chat_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ContactAdminScreen extends StatelessWidget {
-  final User? currentUser;
+  final kaawa.User? currentUser;
   const ContactAdminScreen({super.key, this.currentUser});
 
   Future<void> _callAdmin(String phoneNumber) async {
@@ -37,7 +37,7 @@ class ContactAdminScreen extends StatelessWidget {
                 ),
               )
             else
-              FutureBuilder<List<User>>(
+              FutureBuilder<List<kaawa.User>>(
                 future: DatabaseHelper.instance.getAdmins(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState != ConnectionState.done) {
