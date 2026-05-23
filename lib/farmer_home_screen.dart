@@ -143,6 +143,14 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
       if (mounted) setState(() => _unreadReviewCount = count);
     });
 
+    _auth_service.currentUserDataStream.listen((user) {
+      if (user != null && mounted) {
+        setState(() {
+          _currentFarmer = user;
+        });
+      }
+    });
+
     _interestedBuyersSubscription = _supabaseService.getInterestedBuyersByStockStream(widget.farmer.id!).listen((map) {
       if (mounted) {
         setState(() {
@@ -568,7 +576,6 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
         builder: (context) => ProfileScreen(currentUser: _currentFarmer, profileOwner: _currentFarmer),
       ),
     );
-    await _refreshCurrentFarmer();
   }
 
   Future<void> _scheduleOnboardingGuides() async {

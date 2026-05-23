@@ -239,6 +239,9 @@ create trigger on_auth_user_created
 do $$
 begin
   -- Add tables to the supabase_realtime publication only if they are not already there
+  if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'profiles') then
+    alter publication supabase_realtime add table public.profiles;
+  end if;
   if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'messages') then
     alter publication supabase_realtime add table public.messages;
   end if;
@@ -257,6 +260,7 @@ begin
 end $$;
 
 -- Set replica identity to FULL for tracking updates
+alter table public.profiles replica identity full;
 alter table public.messages replica identity full;
 alter table public.review_notifications replica identity full;
 alter table public.coffee_stock replica identity full;
@@ -264,10 +268,10 @@ alter table public.interested_buyers replica identity full;
 alter table public.password_resets replica identity full;
 
 -- 9. STORAGE CONFIGURATION
--- Ensure the kaawa-media bucket exists
+-- Ensure the kaawa-media bucket exists and remains public
 insert into storage.buckets (id, name, public)
 values ('kaawa-media', 'kaawa-media', true)
-on conflict (id) do nothing;
+on conflict (id) do update set public = excluded.public;
 
 -- Storage Policies for kaawa-media
 do $$

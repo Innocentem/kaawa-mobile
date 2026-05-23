@@ -24,44 +24,75 @@ class AppAvatar extends StatelessWidget {
     this.fallbackAsset = 'assets/images/avatar.jpg',
   }) : super(key: key);
 
+  Widget _buildNetworkImage(String url, ThemeData theme) {
+    return CachedNetworkImage(
+      imageUrl: url,
+      width: size,
+      height: size,
+      fit: fit,
+      fadeInDuration: const Duration(milliseconds: 250),
+      placeholder: (context, url) {
+        final base = theme.colorScheme.surface.withOpacity(0.6);
+        final highlight = theme.colorScheme.surface.withOpacity(0.85);
+        return Shimmer.fromColors(
+          baseColor: base,
+          highlightColor: highlight,
+          child: Container(
+              width: size, height: size, color: theme.colorScheme.surface),
+        );
+      },
+      errorWidget: (context, url, error) {
+        print('AppAvatar: Failed to load image from URL: $url. Error: $error');
+        return Image.asset(fallbackAsset, width: size, height: size, fit: fit);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     Widget content;
 
     try {
-      final isLocalFilePath = filePath != null &&
-          !filePath!.startsWith('http') &&
-          !filePath!.startsWith('https') &&
-          File(filePath!).existsSync();
+      final hasFilePath = filePath != null && filePath!.isNotEmpty;
+      final hasImageUrl = imageUrl != null && imageUrl!.isNotEmpty;
 
-      if (isLocalFilePath) {
-        content =
-            Image.file(File(filePath!), width: size, height: size, fit: fit);
-      } else if (imageUrl != null &&
-          imageUrl!.isNotEmpty &&
-          (imageUrl!.startsWith('http') || imageUrl!.startsWith('https'))) {
-        content = CachedNetworkImage(
-          imageUrl: imageUrl!,
-          width: size,
-          height: size,
-          fit: fit,
-          fadeInDuration: const Duration(milliseconds: 250),
-          // shimmer placeholder while loading
-          placeholder: (context, url) {
-            final theme = Theme.of(context);
-            final base = theme.colorScheme.surface.withOpacity(0.6);
-            final highlight = theme.colorScheme.surface.withOpacity(0.85);
-            return Shimmer.fromColors(
-              baseColor: base,
-              highlightColor: highlight,
-              child: Container(
-                  width: size, height: size, color: theme.colorScheme.surface),
-            );
-          },
-          // fallback if network fails
-          errorWidget: (context, url, error) =>
-              Image.asset(fallbackAsset, width: size, height: size, fit: fit),
-        );
+      if (hasFilePath) {
+        final isUrl =
+            filePath!.startsWith('http') || filePath!.startsWith('https');
+        if (isUrl) {
+          content = _buildNetworkImage(filePath!, theme);
+        } else {
+          final cleanPath = filePath!.startsWith('file://')
+              ? filePath!.replaceFirst('file://', '')
+              : filePath!;
+          final file = File(cleanPath);
+          if (file.existsSync()) {
+            content = Image.file(file, width: size, height: size, fit: fit);
+          } else if (hasImageUrl &&
+              (imageUrl!.startsWith('http') || imageUrl!.startsWith('https'))) {
+            content = _buildNetworkImage(imageUrl!, theme);
+          } else {
+            content =
+                Image.asset(fallbackAsset, width: size, height: size, fit: fit);
+          }
+        }
+      } else if (hasImageUrl) {
+        if (imageUrl!.startsWith('http') || imageUrl!.startsWith('https')) {
+          content = _buildNetworkImage(imageUrl!, theme);
+        } else {
+          // If it's not a URL and not a file path we can handle, it might be a local path that doesn't exist anymore
+          final cleanPath = imageUrl!.startsWith('file://')
+              ? imageUrl!.replaceFirst('file://', '')
+              : imageUrl!;
+          final file = File(cleanPath);
+          if (file.existsSync()) {
+            content = Image.file(file, width: size, height: size, fit: fit);
+          } else {
+            content =
+                Image.asset(fallbackAsset, width: size, height: size, fit: fit);
+          }
+        }
       } else {
         content =
             Image.asset(fallbackAsset, width: size, height: size, fit: fit);

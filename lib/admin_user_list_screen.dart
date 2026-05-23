@@ -22,7 +22,11 @@ class _AdminUserListScreenState extends State<AdminUserListScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _usersFuture = SupabaseService.instance.getAllProfiles());
+    final future = SupabaseService.instance.getAllProfiles();
+    setState(() {
+      _usersFuture = future;
+    });
+    await future;
   }
 
   Widget _statusBadge(kaawa.User u) {

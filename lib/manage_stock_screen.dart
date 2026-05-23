@@ -463,13 +463,15 @@ class _StockDialogState extends State<_StockDialog> {
           : (_selectedCoffeeType ?? '');
 
       String? finalImagePath = _coffeePicturePath;
+      bool uploadFailed = false;
       if (_coffeePicturePath != null) {
         final paths = _coffeePicturePath!.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
         final uploadedUrls = <String>[];
 
         for (final p in paths) {
           if (p.startsWith('/') || p.startsWith('file:')) {
-            final file = File(p);
+            final cleanPath = p.startsWith('file://') ? p.replaceFirst('file://', '') : p;
+            final file = File(cleanPath);
             if (await file.exists()) {
               final publicUrl = await SupabaseService.instance.uploadImage(
                 'kaawa-media',
@@ -479,14 +481,25 @@ class _StockDialogState extends State<_StockDialog> {
               if (publicUrl != null) {
                 uploadedUrls.add(publicUrl);
               } else {
-                uploadedUrls.add(p); // Fallback to local if upload failed (not ideal)
+                uploadFailed = true;
+                break;
               }
             } else {
-              uploadedUrls.add(p);
+              uploadFailed = true;
+              break;
             }
           } else {
             uploadedUrls.add(p);
           }
+        }
+        
+        if (uploadFailed) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not upload one or more images. Please try again.')),
+            );
+          }
+          return;
         }
         finalImagePath = uploadedUrls.join(',');
       }

@@ -30,23 +30,36 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   late Stream<List<Message>> _messagesStream;
   CoffeeStock? _coffeeStock;
+  late kaawa.User _otherUser;
 
   @override
   void initState() {
     super.initState();
+    _otherUser = widget.otherUser;
     _coffeeStock = widget.coffeeStock;
     _messagesStream = SupabaseService.instance.getMessagesStream(widget.currentUser.id!, widget.otherUser.id!);
     if (widget.initialMessage != null) {
       _messageController.text = widget.initialMessage!;
     }
     SupabaseService.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
+    _subscribeToOtherUserProfile();
+  }
+
+  void _subscribeToOtherUserProfile() {
+    SupabaseService.instance.getProfileStream(widget.otherUser.id!).listen((updatedProfile) {
+      if (mounted && updatedProfile != null) {
+        setState(() {
+          _otherUser = updatedProfile;
+        });
+      }
+    });
   }
 
   Future<void> _sendMessage() async {
     if (_messageController.text.isNotEmpty) {
       final message = Message(
         senderId: widget.currentUser.id!,
-        receiverId: widget.otherUser.id!,
+        receiverId: _otherUser.id!,
         text: _messageController.text,
         timestamp: DateTime.now(),
         coffeeStockId: _coffeeStock?.id,
@@ -227,7 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.otherUser.fullName),
+        title: Text(_otherUser.fullName),
       ),
       body: Column(
         children: [

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/coffee_stock_data.dart';
@@ -13,18 +14,67 @@ class SupabaseService {
   SupabaseService._privateConstructor();
 
   // Storage
-  Future<String?> uploadImage(String bucket, String path, File file, {String? oldUrl}) async {
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}_${file.path.split('/').last}';
-    final fullPath = '$path/$fileName';
-    
-    await _supabase.storage.from(bucket).upload(fullPath, file);
-    final publicUrl = _supabase.storage.from(bucket).getPublicUrl(fullPath);
+  Future<String?> uploadImage(String bucket, String path, File file,
+      {String? oldUrl}) async {
+    try {
+      if (!await file.exists()) {
+        print(
+            'SupabaseService: Upload failed. File does not exist at ${file.path}');
+        return null;
+      }
 
-    if (oldUrl != null && oldUrl.isNotEmpty && oldUrl.contains(bucket)) {
-      await deleteImage(bucket, oldUrl);
+      final bytes = await file.readAsBytes();
+      final extension = file.path.split('.').last.toLowerCase();
+      final fileName =
+          '${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecond}.$extension';
+
+      // Sanitize path: remove leading/trailing slashes and trim
+      final cleanPath = path.replaceAll(RegExp(r'^/|/$'), '').trim();
+      final fullPath = cleanPath.isEmpty ? fileName : '$cleanPath/$fileName';
+
+      // Determine content type
+      String contentType = 'image/jpeg';
+      if (extension == 'png')
+        contentType = 'image/png';
+      else if (extension == 'webp')
+        contentType = 'image/webp';
+      else if (extension == 'gif') contentType = 'image/gif';
+
+      print(
+          'SupabaseService: Uploading ${bytes.length} bytes to $bucket/$fullPath ($contentType)');
+
+      // Using the path as the first argument, and bytes as the data.
+      // supabase_flutter 2.x supports Uint8List in upload().
+      await _supabase.storage.from(bucket).uploadBinary(
+            fullPath,
+            bytes,
+            fileOptions: FileOptions(
+              contentType: contentType,
+              upsert: true,
+            ),
+          );
+
+      final publicUrl = _supabase.storage.from(bucket).getPublicUrl(fullPath);
+
+      // Basic validation of the returned URL
+      if (publicUrl.isEmpty || !publicUrl.startsWith('http')) {
+        print('SupabaseService: Invalid public URL generated: $publicUrl');
+        return null;
+      }
+
+      print('SupabaseService: Upload successful. URL: $publicUrl');
+
+      if (oldUrl != null && oldUrl.isNotEmpty && oldUrl.contains(bucket)) {
+        // Run deletion in background
+        deleteImage(bucket, oldUrl).catchError(
+            (e) => print('SupabaseService: Delete old image failed: $e'));
+      }
+
+      return publicUrl;
+    } catch (e) {
+      print('SupabaseService: uploadImage exception: $e');
+      return null;
     }
-    
-    return publicUrl;
   }
 
   Future<void> deleteImage(String bucket, String url) async {
@@ -32,10 +82,25 @@ class SupabaseService {
       final uri = Uri.parse(url);
       final pathSegments = uri.pathSegments;
       // Expected public URL format: .../storage/v1/object/public/bucket/path/to/file
-      final bucketIndex = pathSegments.indexOf(bucket);
-      if (bucketIndex != -1 && pathSegments.length > bucketIndex + 1) {
-        final path = pathSegments.sublist(bucketIndex + 1).join('/');
-        await _supabase.storage.from(bucket).remove([path]);
+
+      // Find the index of 'public' in pathSegments, then skip it and get the rest
+      final publicIndex = pathSegments.indexOf('public');
+      if (publicIndex != -1 && pathSegments.length > publicIndex + 2) {
+        // After 'public' comes bucket, then the file path
+        final bucketFromUrl = pathSegments[publicIndex + 1];
+
+        // Verify the bucket matches
+        if (bucketFromUrl == bucket) {
+          // The file path is everything after bucket
+          final filePath = pathSegments.sublist(publicIndex + 2).join('/');
+          print('SupabaseService.deleteImage: Deleting $filePath from $bucket');
+          await _supabase.storage.from(bucket).remove([filePath]);
+        } else {
+          print(
+              'SupabaseService.deleteImage: Bucket mismatch. Expected $bucket, found $bucketFromUrl');
+        }
+      } else {
+        print('SupabaseService.deleteImage: Could not parse URL: $url');
       }
     } catch (e) {
       // Log error but don't fail the upload process
@@ -50,9 +115,17 @@ class SupabaseService {
         .select()
         .eq('id', userId)
         .maybeSingle();
-    
+
     if (response == null) return null;
     return kaawa.User.fromMap(response);
+  }
+
+  Stream<kaawa.User?> getProfileStream(String userId) {
+    return _supabase
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', userId)
+        .map((data) => data.isNotEmpty ? kaawa.User.fromMap(data.first) : null);
   }
 
   Future<List<kaawa.User>> getAllProfiles() async {
@@ -60,11 +133,32 @@ class SupabaseService {
     return (response as List).map((m) => kaawa.User.fromMap(m)).toList();
   }
 
-  Future<void> updateProfile(kaawa.User user) async {
-    await _supabase
-        .from('profiles')
-        .update(user.toMap())
-        .eq('id', user.id!);
+  Future<kaawa.User?> updateProfile(kaawa.User user) async {
+    try {
+      final response = await _supabase
+          .from('profiles')
+          .update(user.toMap())
+          .eq('id', user.id!)
+          .select()
+          .maybeSingle();
+      return response != null ? kaawa.User.fromMap(response) : null;
+    } catch (e) {
+      print('SupabaseService.updateProfile error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updateAuthMetadata(kaawa.User user) async {
+    await _supabase.auth.updateUser(
+      UserAttributes(
+        data: {
+          'full_name': user.fullName,
+          'phone_number': user.phoneNumber,
+          'district': user.district,
+          'profile_picture_url': user.profilePicturePath,
+        },
+      ),
+    );
   }
 
   // Coffee Stock
@@ -119,8 +213,12 @@ class SupabaseService {
   }
 
   Future<void> insertReview(Review review) async {
-    final response = await _supabase.from('reviews').insert(review.toMap()).select().single();
-    
+    final response = await _supabase
+        .from('reviews')
+        .insert(review.toMap())
+        .select()
+        .single();
+
     await _supabase.from('review_notifications').insert({
       'recipient_id': review.reviewedUserId,
       'sender_id': review.reviewerId,
@@ -139,17 +237,18 @@ class SupabaseService {
     return (response as List).length;
   }
 
-  Future<List<Map<String, dynamic>>> getReviewNotifications(String reviewedUserId) async {
+  Future<List<Map<String, dynamic>>> getReviewNotifications(
+      String reviewedUserId) async {
     final response = await _supabase
         .from('review_notifications')
         .select('*, reviews(*, profiles:reviewer_id(*))')
         .eq('recipient_id', reviewedUserId)
         .order('created_at', ascending: false);
-    
+
     return (response as List).map((row) {
       final reviewData = row['reviews'];
       final reviewerData = reviewData['profiles'];
-      
+
       return {
         'notification': {
           'id': row['id'],
@@ -171,8 +270,7 @@ class SupabaseService {
   Future<void> markAllReviewNotificationsRead(String reviewedUserId) async {
     await _supabase
         .from('review_notifications')
-        .update({'is_read': true})
-        .eq('recipient_id', reviewedUserId);
+        .update({'is_read': true}).eq('recipient_id', reviewedUserId);
   }
 
   Future<Map<String, dynamic>> getRatingSummaryForUser(String userId) async {
@@ -180,11 +278,12 @@ class SupabaseService {
         .from('reviews')
         .select('rating')
         .eq('reviewed_user_id', userId);
-    
+
     final reviews = response as List;
     if (reviews.isEmpty) return {'avg': 0.0, 'count': 0};
-    
-    final sum = reviews.fold<double>(0, (prev, element) => prev + (element['rating'] as num).toDouble());
+
+    final sum = reviews.fold<double>(
+        0, (prev, element) => prev + (element['rating'] as num).toDouble());
     return {'avg': sum / reviews.length, 'count': reviews.length};
   }
 
@@ -194,7 +293,9 @@ class SupabaseService {
         .from('interested_buyers')
         .select('coffee_stock_id')
         .eq('buyer_id', buyerId);
-    return (response as List).map((m) => m['coffee_stock_id'].toString()).toList();
+    return (response as List)
+        .map((m) => m['coffee_stock_id'].toString())
+        .toList();
   }
 
   Future<int> getInterestCountForStock(String stockId) async {
@@ -226,7 +327,7 @@ class SupabaseService {
         .select('id')
         .eq('farmer_id', farmerId)
         .eq('is_sold', false);
-    
+
     final stockIds = (stocksResponse as List).map((s) => s['id']).toList();
     if (stockIds.isEmpty) return 0;
 
@@ -243,15 +344,16 @@ class SupabaseService {
         .from('interested_buyers')
         .select('profiles(*)')
         .eq('coffee_stock_id', stockId);
-    
-    return (response as List).map((m) => kaawa.User.fromMap(m['profiles'])).toList();
+
+    return (response as List)
+        .map((m) => kaawa.User.fromMap(m['profiles']))
+        .toList();
   }
 
   Future<void> markInterestsAsSeenForStock(String stockId) async {
     await _supabase
         .from('interested_buyers')
-        .update({'seen_by_farmer': true})
-        .eq('coffee_stock_id', stockId);
+        .update({'seen_by_farmer': true}).eq('coffee_stock_id', stockId);
   }
 
   // Favorites
@@ -260,8 +362,10 @@ class SupabaseService {
         .from('favorites')
         .select('profiles!favorites_favorite_user_id_fkey(*)')
         .eq('user_id', userId);
-    
-    return (response as List).map((m) => kaawa.User.fromMap(m['profiles'])).toList();
+
+    return (response as List)
+        .map((m) => kaawa.User.fromMap(m['profiles']))
+        .toList();
   }
 
   Future<void> addFavorite(String userId, String favoriteUserId) async {
@@ -286,7 +390,7 @@ class SupabaseService {
         .select('*, profiles:sender_id(*), receiver:receiver_id(*)')
         .or('sender_id.eq.$userId,receiver_id.eq.$userId')
         .order('created_at', ascending: false);
-    
+
     final messages = (response as List).map((m) => Message.fromMap(m)).toList();
     final Map<String, Message> latestMessages = {};
     final Map<String, kaawa.User> otherUsers = {};
@@ -295,8 +399,9 @@ class SupabaseService {
       final otherId = msg.senderId == userId ? msg.receiverId : msg.senderId;
       if (!latestMessages.containsKey(otherId)) {
         latestMessages[otherId] = msg;
-        
-        final msgData = (response as List).firstWhere((element) => element['id'] == msg.id);
+
+        final msgData =
+            (response as List).firstWhere((element) => element['id'] == msg.id);
         if (msg.senderId == userId) {
           otherUsers[otherId] = kaawa.User.fromMap(msgData['receiver']);
         } else {
@@ -312,7 +417,7 @@ class SupabaseService {
       if (lastMsg.coffeeStockId != null) {
         stock = await getCoffeeStockById(lastMsg.coffeeStockId!);
       }
-      
+
       conversations.add(Conversation(
         otherUser: otherUsers[otherId]!,
         lastMessage: lastMsg,
@@ -329,7 +434,7 @@ class SupabaseService {
         .select()
         .or('and(sender_id.eq.$userId1,receiver_id.eq.$userId2),and(sender_id.eq.$userId2,receiver_id.eq.$userId1)')
         .order('created_at', ascending: true);
-    
+
     return (response as List).map((m) => Message.fromMap(m)).toList();
   }
 
@@ -362,7 +467,7 @@ class SupabaseService {
         .eq('receiver_id', farmerId)
         .eq('is_purchase_request', true)
         .order('created_at', ascending: false);
-    
+
     return (response as List).map((m) => Message.fromMap(m)).toList();
   }
 
@@ -376,10 +481,8 @@ class SupabaseService {
   }
 
   Stream<List<CoffeeStock>> getAllCoffeeStockStream() {
-    return _supabase
-        .from('coffee_stock')
-        .stream(primaryKey: ['id'])
-        .map((data) => data.map((m) => CoffeeStock.fromMap(m)).toList());
+    return _supabase.from('coffee_stock').stream(primaryKey: ['id']).map(
+        (data) => data.map((m) => CoffeeStock.fromMap(m)).toList());
   }
 
   Stream<int> getUnreadMessageCountStream(String userId) {
@@ -401,14 +504,15 @@ class SupabaseService {
         .from('review_notifications')
         .stream(primaryKey: ['id'])
         .eq('recipient_id', userId)
-        .map((data) => data.where((m) => m['is_read'] == false || m['is_read'] == 0).length);
+        .map((data) => data
+            .where((m) => m['is_read'] == false || m['is_read'] == 0)
+            .length);
   }
 
   Stream<int> getInterestedCountStreamForFarmer(String farmerId) {
-    return _supabase
-        .from('interested_buyers')
-        .stream(primaryKey: ['id'])
-        .asyncMap((_) => getTotalInterestCountForFarmer(farmerId));
+    return _supabase.from('interested_buyers').stream(primaryKey: [
+      'id'
+    ]).asyncMap((_) => getTotalInterestCountForFarmer(farmerId));
   }
 
   Stream<int> getPurchaseRequestCountStreamForFarmer(String farmerId) {
@@ -416,22 +520,41 @@ class SupabaseService {
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('receiver_id', farmerId)
-        .map((data) => data.where((m) => m['is_purchase_request'] == true).length);
+        .map((data) =>
+            data.where((m) => m['is_purchase_request'] == true).length);
   }
 
   Stream<List<Conversation>> getConversationsStream(String userId) {
-    return _supabase
-        .from('messages')
-        .stream(primaryKey: ['id'])
-        .asyncMap((data) async {
-      final messages = data
-          .where((m) => m['sender_id'] == userId || m['receiver_id'] == userId)
-          .map((m) => Message.fromMap(m))
-          .toList();
-      messages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    // We listen to both messages and profiles to ensure the UI updates when a profile (like picture) changes.
+    final messagesStream =
+        _supabase.from('messages').stream(primaryKey: ['id']);
+    final profilesStream =
+        _supabase.from('profiles').stream(primaryKey: ['id']);
+
+    final controller = StreamController<void>();
+
+    // Send initial event
+    controller.add(null);
+
+    var messageSub = messagesStream.listen((_) => controller.add(null));
+    var profileSub = profilesStream.listen((_) => controller.add(null));
+
+    controller.onCancel = () {
+      messageSub.cancel();
+      profileSub.cancel();
+      controller.close();
+    };
+
+    return controller.stream.asyncMap((_) async {
+      final data = await _supabase
+          .from('messages')
+          .select()
+          .or('sender_id.eq.$userId,receiver_id.eq.$userId')
+          .order('created_at', ascending: false);
+
+      final messages = (data as List).map((m) => Message.fromMap(m)).toList();
 
       final Map<String, Message> latestMessages = {};
-
       for (final msg in messages) {
         final otherId = msg.senderId == userId ? msg.receiverId : msg.senderId;
         if (!latestMessages.containsKey(otherId)) {
@@ -472,8 +595,8 @@ class SupabaseService {
                   (m.senderId == userId1 && m.receiverId == userId2) ||
                   (m.senderId == userId2 && m.receiverId == userId1))
               .toList();
-          
-          // Force a secondary sort in Dart to ensure perfect UI order 
+
+          // Force a secondary sort in Dart to ensure perfect UI order
           // even if network packets arrive slightly out of sequence
           msgs.sort((a, b) => a.timestamp.compareTo(b.timestamp));
           return msgs;
@@ -483,36 +606,40 @@ class SupabaseService {
   Stream<Map<String, dynamic>> getUserActivityStream(String userId) {
     return _supabase
         .from('messages')
-        .stream(primaryKey: ['id'])
-        .asyncMap((_) async {
-          final listings = await _supabase
-              .from('coffee_stock')
-              .select('id')
-              .eq('farmer_id', userId);
-          
-          final interests = await _supabase
-              .from('interested_buyers')
-              .select('id')
-              .eq('buyer_id', userId);
-          
-          final convs = await getConversations(userId);
-          
-          final profile = await getProfile(userId);
-          
-          return {
-            'listingsCount': (listings as List).length,
-            'interestsCount': (interests as List).length,
-            'conversationsCount': convs.length,
-            'earliestActivityIso': profile?.id != null ? profile!.id : DateTime.now().toIso8601String(), // Fallback
-          };
-        });
+        .stream(primaryKey: ['id']).asyncMap((_) async {
+      final listings = await _supabase
+          .from('coffee_stock')
+          .select('id')
+          .eq('farmer_id', userId);
+
+      final interests = await _supabase
+          .from('interested_buyers')
+          .select('id')
+          .eq('buyer_id', userId);
+
+      final convs = await getConversations(userId);
+
+      final profileData = await _supabase
+          .from('profiles')
+          .select('created_at')
+          .eq('id', userId)
+          .maybeSingle();
+
+      return {
+        'listingsCount': (listings as List).length,
+        'interestsCount': (interests as List).length,
+        'conversationsCount': convs.length,
+        'earliestActivityIso':
+            profileData?['created_at'] ?? DateTime.now().toIso8601String(),
+      };
+    });
   }
 
-  Stream<Map<String, List<kaawa.User>>> getInterestedBuyersByStockStream(String farmerId) {
+  Stream<Map<String, List<kaawa.User>>> getInterestedBuyersByStockStream(
+      String farmerId) {
     return _supabase
         .from('interested_buyers')
-        .stream(primaryKey: ['id'])
-        .asyncMap((_) async {
+        .stream(primaryKey: ['id']).asyncMap((_) async {
       final stocks = await getCoffeeStockByFarmer(farmerId);
       final Map<String, List<kaawa.User>> map = {};
 
@@ -547,7 +674,7 @@ class SupabaseService {
         .from('coffee_stock')
         .select('id')
         .eq('farmer_id', userId);
-    
+
     final stockIds = (stocksResponse as List).map((s) => s['id']).toList();
     List interestsForFarmerResponse = [];
     if (stockIds.isNotEmpty) {
@@ -587,7 +714,8 @@ class SupabaseService {
       });
     }
 
-    log.sort((a, b) => (b['timestamp'] as String).compareTo(a['timestamp'] as String));
+    log.sort((a, b) =>
+        (b['timestamp'] as String).compareTo(a['timestamp'] as String));
     return log;
   }
 
@@ -608,10 +736,8 @@ class SupabaseService {
   }
 
   Stream<int> getPendingPasswordResetCountStream() {
-    return _supabase
-        .from('password_resets')
-        .stream(primaryKey: ['id'])
-        .map((data) => data.where((r) => r['handled'] == false).length);
+    return _supabase.from('password_resets').stream(primaryKey: ['id']).map(
+        (data) => data.where((r) => r['handled'] == false).length);
   }
 
   Future<void> markPasswordResetHandled(String id, {String? adminId}) async {
@@ -625,29 +751,23 @@ class SupabaseService {
   Future<bool> adminSetUserPassword(String userId, String newPassword) async {
     await _supabase
         .from('profiles')
-        .update({'must_change_password': true})
-        .eq('id', userId);
+        .update({'must_change_password': true}).eq('id', userId);
     return true;
   }
 
-  Future<void> suspendUser(String userId, DateTime until, {String? reason}) async {
-    await _supabase
-        .from('profiles')
-        .update({
-          'suspended_until': until.toIso8601String(),
-          'suspension_reason': reason,
-        })
-        .eq('id', userId);
+  Future<void> suspendUser(String userId, DateTime until,
+      {String? reason}) async {
+    await _supabase.from('profiles').update({
+      'suspended_until': until.toIso8601String(),
+      'suspension_reason': reason,
+    }).eq('id', userId);
   }
 
   Future<void> unsuspendUser(String userId) async {
-    await _supabase
-        .from('profiles')
-        .update({
-          'suspended_until': null,
-          'suspension_reason': null,
-        })
-        .eq('id', userId);
+    await _supabase.from('profiles').update({
+      'suspended_until': null,
+      'suspension_reason': null,
+    }).eq('id', userId);
   }
 
   Future<Map<String, dynamic>> getUserActivitySummary(String userId) async {
@@ -655,7 +775,7 @@ class SupabaseService {
         .from('coffee_stock')
         .select('id')
         .eq('farmer_id', userId);
-    
+
     final interests = await _supabase
         .from('interested_buyers')
         .select('id')

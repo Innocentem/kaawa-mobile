@@ -87,6 +87,14 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       }
     });
 
+    _authService.currentUserDataStream.listen((user) {
+      if (user != null && mounted) {
+        setState(() {
+          _currentBuyer = user;
+        });
+      }
+    });
+
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
@@ -385,7 +393,6 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         builder: (context) => ProfileScreen(currentUser: _currentBuyer, profileOwner: _currentBuyer),
       ),
     );
-    await _refreshCurrentBuyer();
   }
 
   Future<void> _scheduleOnboardingGuides() async {

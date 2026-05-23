@@ -27,13 +27,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   bool _reviewStatusLoaded = false;
   bool _alreadyReviewed = false;
   double _selectedQuantity = 1.0;
+  kaawa.User? _farmer;
 
   @override
   void initState() {
     super.initState();
+    _farmer = widget.farmer;
     photos = _parseImages(widget.stock.coffeePicturePath);
     _loadInterestedCount();
     _loadReviewStatus();
+    _subscribeToFarmerProfile();
+  }
+
+  void _subscribeToFarmerProfile() {
+    if (widget.farmer?.id != null) {
+      SupabaseService.instance.getProfileStream(widget.farmer!.id!).listen((updatedProfile) {
+        if (mounted && updatedProfile != null) {
+          setState(() {
+            _farmer = updatedProfile;
+          });
+        }
+      });
+    }
   }
 
   List<String?> _parseImages(String? pathField) {
@@ -155,7 +170,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     children: [
                       InkWell(
                         borderRadius: BorderRadius.circular(28),
-                        onTap: widget.farmer == null || widget.currentUser == null
+                        onTap: _farmer == null || widget.currentUser == null
                             ? null
                             : () {
                                 Navigator.push(
@@ -163,14 +178,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   MaterialPageRoute(
                                     builder: (context) => ProfileScreen(
                                       currentUser: widget.currentUser!,
-                                      profileOwner: widget.farmer!,
+                                      profileOwner: _farmer!,
                                     ),
                                   ),
                                 );
                               },
                         child: AppAvatar(
-                          filePath: widget.farmer?.profilePicturePath,
-                          imageUrl: widget.farmer?.profilePicturePath,
+                          filePath: _farmer?.profilePicturePath,
+                          imageUrl: _farmer?.profilePicturePath,
                           size: 56,
                         ),
                       ),
@@ -187,16 +202,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.call),
-                                  onPressed: () => _launchPhone(widget.farmer?.phoneNumber),
+                                  onPressed: () => _launchPhone(_farmer?.phoneNumber),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.message),
                                   onPressed: () {
-                                    if (widget.currentUser != null && widget.farmer != null) {
+                                    if (widget.currentUser != null && _farmer != null) {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => ChatScreen(currentUser: widget.currentUser!, otherUser: widget.farmer!, coffeeStock: widget.stock),
+                                          builder: (context) => ChatScreen(currentUser: widget.currentUser!, otherUser: _farmer!, coffeeStock: widget.stock),
                                         ),
                                       );
                                     }
@@ -332,13 +347,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () {
-                                  if (widget.currentUser != null && widget.farmer != null) {
+                                  if (widget.currentUser != null && _farmer != null) {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
                                         builder: (context) => ChatScreen(
                                           currentUser: widget.currentUser!,
-                                          otherUser: widget.farmer!,
+                                          otherUser: _farmer!,
                                           coffeeStock: widget.stock,
                                         ),
                                       ),
@@ -355,7 +370,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     ),
                   ),
                 const SizedBox(height: 20),
-                if (widget.currentUser != null && widget.farmer != null && widget.currentUser!.id != widget.farmer!.id && widget.currentUser!.userType != kaawa.UserType.admin && widget.farmer!.userType != kaawa.UserType.admin)
+                if (widget.currentUser != null && _farmer != null && widget.currentUser!.id != _farmer!.id && widget.currentUser!.userType != kaawa.UserType.admin && _farmer!.userType != kaawa.UserType.admin)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                     child: ElevatedButton(
@@ -367,7 +382,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 MaterialPageRoute(
                                   builder: (context) => WriteReviewScreen(
                                     reviewer: widget.currentUser!,
-                                    reviewedUser: widget.farmer!,
+                                    reviewedUser: _farmer!,
                                   ),
                                 ),
                               );

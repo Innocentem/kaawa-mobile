@@ -53,6 +53,17 @@ class AuthService {
   /// Get the current user's ID
   String? get userId => _supabase.auth.currentUser?.id;
 
+  /// Stream of the current user's data from the profiles table
+  Stream<kaawa_user.User?> get currentUserDataStream {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return Stream.value(null);
+    return _supabase
+        .from('profiles')
+        .stream(primaryKey: ['id'])
+        .eq('id', user.id)
+        .map((data) => data.isNotEmpty ? kaawa_user.User.fromMap(data.first) : null);
+  }
+
   /// Get current user data as our User model
   kaawa_user.User? get currentUserData {
     final user = _supabase.auth.currentUser;
@@ -71,6 +82,7 @@ class AuthService {
         (e) => e.name == userTypeStr,
         orElse: () => kaawa_user.UserType.buyer,
       ),
+      profilePicturePath: metadata['profile_picture_url'],
     );
   }
 

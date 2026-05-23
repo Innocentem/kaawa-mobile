@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class ProfileScreen extends StatefulWidget {
   final kaawa.User currentUser;
@@ -31,6 +32,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isEditing = false;
+  bool _isSaving = false;
   bool _hasReviewed = false;
   bool _reviewStatusLoaded = false;
 
@@ -99,74 +101,112 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _saveChanges() async {
     if (!_formKey.currentState!.validate()) return;
 
-    String? finalImagePath = _profilePicturePath;
-    var uploadFailed = false;
-    if (_profilePicturePath != null &&
-        (_profilePicturePath!.startsWith('/') ||
-            _profilePicturePath!.startsWith('file:'))) {
-      final file = File(_profilePicturePath!);
-      if (await file.exists()) {
-        try {
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      String? finalImagePath = _profilePicturePath;
+      bool uploadFailed = false;
+
+      if (_profilePicturePath != null &&
+          (_profilePicturePath!.startsWith('/') ||
+              _profilePicturePath!.startsWith('file:'))) {
+        final cleanPath = _profilePicturePath!.startsWith('file://')
+            ? _profilePicturePath!.replaceFirst('file://', '')
+            : _profilePicturePath!;
+        final file = File(cleanPath);
+
+        if (await file.exists()) {
           final publicUrl = await SupabaseService.instance.uploadImage(
             'kaawa-media',
             'profiles/${_profileOwner.id}',
             file,
             oldUrl: _profileOwner.profilePicturePath,
           );
+
           if (publicUrl != null) {
             finalImagePath = publicUrl;
-            setState(() {
-              _profilePicturePath = publicUrl;
-            });
+            // Delete the temporary local file after successful upload
+            try {
+              await file.delete();
+            } catch (e) {
+              print('Failed to delete local file: $e');
+            }
           } else {
             uploadFailed = true;
           }
-        } catch (e) {
+        } else {
           uploadFailed = true;
         }
-      } else {
-        uploadFailed = true;
+      }
+
+      if (uploadFailed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Could not upload profile picture. Please check your connection.')),
+          );
+        }
+        setState(() => _isSaving = false);
+        return;
+      }
+
+      final updatedUser = kaawa.User(
+        id: _profileOwner.id,
+        fullName: _fullNameController.text,
+        phoneNumber: _phoneNumberController.text,
+        password: _profileOwner.password, // Keep the existing password
+        district: _districtController.text,
+        userType: _profileOwner.userType,
+        profilePicturePath: finalImagePath,
+        latitude: _profileOwner.latitude,
+        longitude: _profileOwner.longitude,
+        village: _villageController.text,
+        mustChangePassword: _profileOwner.mustChangePassword,
+        suspendedUntil: _profileOwner.suspendedUntil,
+        suspensionReason: _profileOwner.suspensionReason,
+      );
+
+      final result = await SupabaseService.instance.updateProfile(updatedUser);
+
+      // Update Supabase Auth metadata if it's the current user's own profile
+      if (_isOwnProfile) {
+        await SupabaseService.instance.updateAuthMetadata(updatedUser);
+      }
+
+      if (mounted) {
+        // Clear the image cache for the new profile picture URL
+        if (finalImagePath != null &&
+            (finalImagePath.startsWith('http') ||
+                finalImagePath.startsWith('https'))) {
+          print(
+              'ProfileScreen: Clearing cache for new image URL: $finalImagePath');
+          await DefaultCacheManager().removeFile(finalImagePath);
+        }
+
+        setState(() {
+          _isEditing = false;
+          _isSaving = false;
+          _profileOwner = result ?? updatedUser;
+          _initializeControllers(_profileOwner);
+          print(
+              'ProfileScreen: Updated _profilePicturePath to: $_profilePicturePath');
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e')),
+        );
       }
     }
-
-    if (uploadFailed) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Could not upload profile picture. Please try again.'),
-        ),
-      );
-      return;
-    }
-
-    final updatedUser = kaawa.User(
-      id: _profileOwner.id,
-      fullName: _fullNameController.text,
-      phoneNumber: _phoneNumberController.text,
-      password: _profileOwner.password, // Keep the existing password
-      district: _districtController.text,
-      userType: _profileOwner.userType,
-      profilePicturePath: finalImagePath,
-      latitude: _profileOwner.latitude,
-      longitude: _profileOwner.longitude,
-      village: _villageController.text,
-      mustChangePassword: _profileOwner.mustChangePassword,
-      suspendedUntil: _profileOwner.suspendedUntil,
-      suspensionReason: _profileOwner.suspensionReason,
-    );
-
-    await SupabaseService.instance.updateProfile(updatedUser);
-    final refreshed =
-        await SupabaseService.instance.getProfile(updatedUser.id!);
-
-    setState(() {
-      _isEditing = false;
-      _profileOwner = refreshed ?? updatedUser;
-      _initializeControllers(_profileOwner);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Profile updated successfully!')),
-    );
   }
 
   void _openActivityLog() {
@@ -240,6 +280,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Material(
                           type: MaterialType.transparency,
                           child: AppAvatar(
+                            key: ValueKey(_profilePicturePath),
                             filePath: _profilePicturePath,
                             imageUrl: _profilePicturePath,
                             size: 72,
@@ -348,8 +389,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 16),
                   if (_isOwnProfile && _isEditing)
                     ElevatedButton(
-                        onPressed: _saveChanges,
-                        child: const Text('Save Changes')),
+                      onPressed: _isSaving ? null : _saveChanges,
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Text('Save Changes'),
+                    ),
                   if (_isOwnProfile &&
                       _profileOwner.userType == kaawa.UserType.farmer)
                     Padding(
