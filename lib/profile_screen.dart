@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/manage_stock_screen.dart';
@@ -42,6 +44,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _districtController;
   late TextEditingController _villageController;
   String? _profilePicturePath;
+  double? _currentLatitude;
+  double? _currentLongitude;
 
   bool get _isOwnProfile => widget.currentUser.id == _profileOwner.id;
 
@@ -70,6 +74,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _districtController = TextEditingController(text: user.district);
     _villageController = TextEditingController(text: user.village);
     _profilePicturePath = user.profilePicturePath;
+    _currentLatitude = user.latitude;
+    _currentLongitude = user.longitude;
   }
 
   void _toggleEditing() {
@@ -80,6 +86,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _initializeControllers(_profileOwner);
       }
     });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    try {
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location services are disabled.')),
+          );
+        }
+        return;
+      }
+
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Location permissions are denied')),
+            );
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Location permissions are permanently denied, we cannot request permissions.')),
+          );
+        }
+        return;
+      }
+
+      setState(() => _isSaving = true);
+      final position = await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high);
+      setState(() {
+        _currentLatitude = position.latitude;
+        _currentLongitude = position.longitude;
+        _isSaving = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location captured! Remember to save changes.')),
+        );
+      }
+    } catch (e) {
+      setState(() => _isSaving = false);
+      if (mounted) {
+        if (e is MissingPluginException) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text(
+                    'Location is not available on this platform.')),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not get location: $e')),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -161,8 +237,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         district: _districtController.text,
         userType: _profileOwner.userType,
         profilePicturePath: finalImagePath,
-        latitude: _profileOwner.latitude,
-        longitude: _profileOwner.longitude,
+        latitude: _currentLatitude,
+        longitude: _currentLongitude,
         village: _villageController.text,
         mustChangePassword: _profileOwner.mustChangePassword,
         suspendedUntil: _profileOwner.suspendedUntil,
@@ -386,6 +462,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       isEnabled: _isEditing),
                   if (_profileOwner.userType == kaawa.UserType.farmer)
                     ..._farmerFields,
+                  if (_isOwnProfile && _isEditing) ...[
+                    const SizedBox(height: 16),
+                    if (_currentLatitude != null && _currentLongitude != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          'Location captured: ${_currentLatitude!.toStringAsFixed(4)}, ${_currentLongitude!.toStringAsFixed(4)}',
+                          style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary),
+                        ),
+                      ),
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.location_on),
+                      label: const Text('Update Current Location'),
+                      onPressed: _isSaving ? null : _getCurrentLocation,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   if (_isOwnProfile && _isEditing)
                     ElevatedButton(

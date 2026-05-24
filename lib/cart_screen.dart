@@ -295,13 +295,23 @@ class _CartScreenState extends State<CartScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Shopping Cart'),
-        elevation: 0,
-        backgroundColor: theme.colorScheme.surface,
-        foregroundColor: theme.colorScheme.onSurface,
-      ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context, _localCart);
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Shopping Cart'),
+          elevation: 0,
+          backgroundColor: theme.colorScheme.surface,
+          foregroundColor: theme.colorScheme.onSurface,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context, _localCart),
+          ),
+        ),
       body: _localCart.isEmpty
           ? Center(
               child: Column(
@@ -462,7 +472,7 @@ class _CartScreenState extends State<CartScreen> {
                 ),
               ],
             ),
+      ),
     );
   }
 }
-

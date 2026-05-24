@@ -145,9 +145,13 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
     _auth_service.currentUserDataStream.listen((user) {
       if (user != null && mounted) {
-        setState(() {
-          _currentFarmer = user;
-        });
+        if (user.isSuspended) {
+          _checkSuspensionAndLogout(user);
+        } else {
+          setState(() {
+            _currentFarmer = user;
+          });
+        }
       }
     });
 
@@ -183,16 +187,20 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     }
   }
 
-  Future<void> _checkSuspensionAndLogout() async {
-    final current = await _supabaseService.getProfile(widget.farmer.id!);
+  Future<void> _checkSuspensionAndLogout([kaawa.User? user]) async {
+    final current = user ?? await _supabaseService.getProfile(widget.farmer.id!);
     if (current == null || !current.isSuspended) return;
+
+    if (!mounted) return;
     await _auth_service.logout();
+
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final remaining = current.suspensionRemainingText;
       await showDialog<void>(
         context: context,
+        barrierDismissible: false,
         builder: (c) => AlertDialog(
           title: const Text('Account suspended'),
           content: Column(
@@ -212,15 +220,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(c);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+                  (route) => false,
+                );
+              },
+              child: const Text('OK'),
+            ),
           ],
         ),
-      );
-      if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-        (route) => false,
       );
     });
   }
@@ -360,19 +372,29 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   }
 
   void _toggleSortByDistance() {
+    if (_currentFarmer.latitude == null || _currentFarmer.longitude == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please update your location in profile to use distance sorting')),
+      );
+      return;
+    }
+
     setState(() {
       _sortByDistance = !_sortByDistance;
       if (_sortByDistance) {
         _filteredBuyers.sort((a, b) {
+          if (a.latitude == null || a.longitude == null) return 1;
+          if (b.latitude == null || b.longitude == null) return -1;
+
           final distanceA = Geolocator.distanceBetween(
-            widget.farmer.latitude!,
-            widget.farmer.longitude!,
+            _currentFarmer.latitude!,
+            _currentFarmer.longitude!,
             a.latitude!,
             a.longitude!,
           );
           final distanceB = Geolocator.distanceBetween(
-            widget.farmer.latitude!,
-            widget.farmer.longitude!,
+            _currentFarmer.latitude!,
+            _currentFarmer.longitude!,
             b.latitude!,
             b.longitude!,
           );
@@ -955,11 +977,11 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                       itemBuilder: (context, index) {
                         final buyer = _filteredBuyers[index];
                         final isFavorite = _favoriteUserIds.contains(buyer.id);
-                        final distance = (widget.farmer.latitude != null &&
-                                widget.farmer.longitude != null &&
+                        final distance = (_currentFarmer.latitude != null &&
+                                _currentFarmer.longitude != null &&
                                 buyer.latitude != null &&
                                 buyer.longitude != null)
-                            ? Geolocator.distanceBetween(widget.farmer.latitude!, widget.farmer.longitude!, buyer.latitude!, buyer.longitude!) / 1000
+                            ? Geolocator.distanceBetween(_currentFarmer.latitude!, _currentFarmer.longitude!, buyer.latitude!, buyer.longitude!) / 1000
                             : null;
 
                         return Card(

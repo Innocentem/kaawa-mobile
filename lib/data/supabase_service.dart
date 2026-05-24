@@ -468,7 +468,19 @@ class SupabaseService {
         .eq('is_purchase_request', true)
         .order('created_at', ascending: false);
 
+    // Mark as read after fetching
+    await markPurchaseRequestsAsRead(farmerId);
+
     return (response as List).map((m) => Message.fromMap(m)).toList();
+  }
+
+  Future<void> markPurchaseRequestsAsRead(String farmerId) async {
+    await _supabase
+        .from('messages')
+        .update({'is_read': true})
+        .eq('receiver_id', farmerId)
+        .eq('is_purchase_request', true)
+        .eq('is_read', false);
   }
 
   // Streams
@@ -520,8 +532,10 @@ class SupabaseService {
         .from('messages')
         .stream(primaryKey: ['id'])
         .eq('receiver_id', farmerId)
-        .map((data) =>
-            data.where((m) => m['is_purchase_request'] == true).length);
+        .map((data) => data
+            .where((m) =>
+                m['is_purchase_request'] == true && m['is_read'] == false)
+            .length);
   }
 
   Stream<List<Conversation>> getConversationsStream(String userId) {
@@ -749,6 +763,9 @@ class SupabaseService {
   }
 
   Future<bool> adminSetUserPassword(String userId, String newPassword) async {
+    // In a production app, you'd use a Supabase Edge Function with service_role to update auth.password.
+    // For this prototype, we're flagging must_change_password in the public profile.
+    // The actual password reset in Supabase Auth usually requires email or service_role.
     await _supabase
         .from('profiles')
         .update({'must_change_password': true}).eq('id', userId);

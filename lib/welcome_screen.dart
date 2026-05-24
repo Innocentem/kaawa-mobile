@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/buyer_home_screen.dart';
-import 'package:kaawa/data/database_helper.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/farmer_home_screen.dart';
 import 'package:kaawa/farmer_registration_screen.dart';
@@ -13,6 +12,7 @@ import 'package:kaawa/contact_admin_screen.dart';
 import 'package:kaawa/admin_registration_screen.dart';
 import 'package:kaawa/admin_home_screen.dart';
 import 'package:kaawa/change_password_screen.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:provider/provider.dart';
 
 class InitialScreen extends StatefulWidget {
@@ -24,6 +24,7 @@ class InitialScreen extends StatefulWidget {
 
 class _InitialScreenState extends State<InitialScreen> {
   final AuthService _authService = AuthService();
+  final SupabaseService _supabaseService = SupabaseService.instance;
 
   @override
   void initState() {
@@ -33,10 +34,30 @@ class _InitialScreenState extends State<InitialScreen> {
 
   Future<void> _checkLoginStatus() async {
     if (_authService.isLoggedIn) {
-      final user = _authService.currentUserData;
-      if (user != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userId = _authService.userId;
+      if (userId != null) {
+        // Fetch full profile to check suspension/reset status
+        final user = await _supabaseService.getProfile(userId);
+        
+        if (user != null) {
           if (!mounted) return;
+
+          // If suspended, don't auto-login
+          if (user.isSuspended) {
+            await _authService.logout();
+            return;
+          }
+
+          // If password reset required, go to change password screen
+          if (user.mustChangePassword) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (c) => ChangePasswordScreen(user: user)),
+              (route) => false,
+            );
+            return;
+          }
+
           if (user.userType == kaawa.UserType.farmer) {
             Navigator.pushAndRemoveUntil(
               context,
@@ -56,7 +77,7 @@ class _InitialScreenState extends State<InitialScreen> {
               (route) => false,
             );
           }
-        });
+        }
       }
     }
   }
@@ -204,7 +225,7 @@ class WelcomeScreen extends StatelessWidget {
     final iconColor = IconTheme.of(context).color ?? theme.colorScheme.primary;
 
     return Scaffold(
-      backgroundColor: theme.colorScheme.background,
+      backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
         child: Stack(
           children: [
@@ -382,7 +403,7 @@ class WelcomeScreen extends StatelessWidget {
                     // show dark_mode / light_mode depending on current ThemeMode and let the surrounding theme determine color
                     icon: Icon(
                       themeNotifier.themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-                      color: IconTheme.of(context).color ?? theme.colorScheme.onBackground,
+                      color: IconTheme.of(context).color ?? theme.colorScheme.onSurface,
                     ),
                     onPressed: () => themeNotifier.toggleTheme(),
                     tooltip: 'Toggle theme',
@@ -390,7 +411,7 @@ class WelcomeScreen extends StatelessWidget {
                   IconButton(
                     icon: Icon(
                       Icons.info_outline,
-                      color: IconTheme.of(context).color ?? theme.colorScheme.onBackground,
+                      color: IconTheme.of(context).color ?? theme.colorScheme.onSurface,
                     ),
                     onPressed: () => _showAboutDialog(context, theme),
                     tooltip: 'About Kaawa',

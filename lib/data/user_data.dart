@@ -61,6 +61,38 @@ class User {
     return parts.join(' ');
   }
 
+  User copyWith({
+    String? id,
+    String? fullName,
+    String? phoneNumber,
+    String? district,
+    String? password,
+    UserType? userType,
+    String? profilePicturePath,
+    double? latitude,
+    double? longitude,
+    bool? mustChangePassword,
+    DateTime? suspendedUntil,
+    String? suspensionReason,
+    String? village,
+  }) {
+    return User(
+      id: id ?? this.id,
+      fullName: fullName ?? this.fullName,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      district: district ?? this.district,
+      password: password ?? this.password,
+      userType: userType ?? this.userType,
+      profilePicturePath: profilePicturePath ?? this.profilePicturePath,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+      suspendedUntil: suspendedUntil ?? this.suspendedUntil,
+      suspensionReason: suspensionReason ?? this.suspensionReason,
+      village: village ?? this.village,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

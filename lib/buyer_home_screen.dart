@@ -89,9 +89,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
 
     _authService.currentUserDataStream.listen((user) {
       if (user != null && mounted) {
-        setState(() {
-          _currentBuyer = user;
-        });
+        if (user.isSuspended) {
+          _checkSuspensionAndLogout(user);
+        } else {
+          setState(() {
+            _currentBuyer = user;
+          });
+        }
       }
     });
 
@@ -125,16 +129,23 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     }
   }
 
-  Future<void> _checkSuspensionAndLogout() async {
-    final current = await _supabaseService.getProfile(widget.buyer.id!);
+  Future<void> _checkSuspensionAndLogout([kaawa.User? user]) async {
+    final current = user ?? await _supabaseService.getProfile(widget.buyer.id!);
     if (current == null || !current.isSuspended) return;
-    await _authService.logout();
+    
+    // Check if we are already showing the dialog to avoid duplicates
     if (!mounted) return;
+    
+    await _authService.logout();
+    
+    if (!mounted) return;
+    
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final remaining = current.suspensionRemainingText;
       await showDialog<void>(
         context: context,
+        barrierDismissible: false,
         builder: (c) => AlertDialog(
           title: const Text('Account suspended'),
           content: Column(
@@ -154,15 +165,19 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(c), child: const Text('OK')),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(c);
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const WelcomeScreen()),
+                  (route) => false,
+                );
+              },
+              child: const Text('OK'),
+            ),
           ],
         ),
-      );
-      if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-        (route) => false,
       );
     });
   }
@@ -573,7 +588,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: <Widget>[
-          _shortcutItem(theme, "Cart", Icons.shopping_cart, () => _openCart(), badgeCount: _cartItemCount),
+          _shortcutItem(theme, "Cart", Icons.shopping_cart, () => _openCart(), badgeCount: _cartItemCount > 0 ? _cartItemCount : null),
           _shortcutItem(theme, "Messages", Icons.message, () => _openMessages(), badgeCount: _unreadMessageCount),
           _shortcutItem(theme, "Favorites", Icons.favorite, () => _openFavorites()),
           _shortcutItem(theme, "Reviews", Icons.star, () => _openReviews(), badgeCount: _unreadReviewCount),
@@ -639,7 +654,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       context,
       MaterialPageRoute(builder: (context) => CartScreen(buyer: widget.buyer, cartItems: _cart)),
     );
-    if (result != null) setState(() { _cart = result; _cartItemCount = _cart.length; });
+    if (result != null) {
+      setState(() {
+        _cart = result;
+        _cartItemCount = _cart.length;
+      });
+      _saveCartToPrefs();
+    }
   }
 
   void _openMessages() {

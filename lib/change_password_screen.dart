@@ -1,8 +1,7 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'widgets/compact_loader.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -24,28 +23,32 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
-    final hashed = sha256.convert(utf8.encode(_newPassword.text)).toString();
-    final updated = kaawa.User(
-      id: widget.user.id,
-      fullName: widget.user.fullName,
-      phoneNumber: widget.user.phoneNumber,
-      district: widget.user.district,
-      password: hashed,
-      userType: widget.user.userType,
-      profilePicturePath: widget.user.profilePicturePath,
-      latitude: widget.user.latitude,
-      longitude: widget.user.longitude,
-      village: widget.user.village,
-      mustChangePassword: false,
-      suspendedUntil: widget.user.suspendedUntil,
-      suspensionReason: widget.user.suspensionReason,
-    );
 
-    await DatabaseHelper.instance.updateUser(updated);
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password updated')));
-    // pop until homescreen or login
-    Navigator.popUntil(context, (route) => route.isFirst);
+    try {
+      // 1. Update password in Supabase Auth
+      await Supabase.instance.client.auth.updateUser(
+        UserAttributes(password: _newPassword.text),
+      );
+
+      // 2. Update profile to clear must_change_password flag
+      final updatedUser = widget.user.copyWith(mustChangePassword: false);
+      await SupabaseService.instance.updateProfile(updatedUser);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password updated successfully')),
+      );
+      
+      // Navigate back to the appropriate home screen or first route
+      Navigator.popUntil(context, (route) => route.isFirst);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update password: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override

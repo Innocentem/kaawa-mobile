@@ -42,6 +42,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _messageController.text = widget.initialMessage!;
     }
     SupabaseService.instance.markMessagesAsRead(widget.currentUser.id!, widget.otherUser.id!);
+    SupabaseService.instance.markPurchaseRequestsAsRead(widget.currentUser.id!);
     _subscribeToOtherUserProfile();
   }
 

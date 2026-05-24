@@ -212,6 +212,9 @@ begin
       )
     );
   end if;
+  if not exists (select 1 from pg_policies where policyname = 'Anyone can view their own reset request.' and tablename = 'password_resets') then
+    create policy "Anyone can view their own reset request." on public.password_resets for select using (true);
+  end if;
 end $$;
 
 -- TRIGGER for automatic profile creation on signup

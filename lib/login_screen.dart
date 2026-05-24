@@ -7,6 +7,7 @@ import 'package:kaawa/forgot_password_screen.dart';
 import 'package:kaawa/contact_admin_screen.dart';
 import 'package:kaawa/change_password_screen.dart';
 import 'package:kaawa/admin_home_screen.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' as sb;
 
 class LoginScreen extends StatefulWidget {
@@ -38,6 +39,55 @@ class _LoginScreenState extends State<LoginScreen> {
       final sbUser = response.user;
 
       if (sbUser != null) {
+        // Fetch full profile to check suspension and password reset status
+        final userProfile = await SupabaseService.instance.getProfile(sbUser.id);
+        
+        if (userProfile == null) {
+          // This shouldn't happen if auth succeeded, but handle it
+          await _authService.signOut();
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Profile not found.')),
+            );
+          }
+          return;
+        }
+
+        if (userProfile.isSuspended) {
+          await _authService.signOut();
+          if (mounted) {
+            String message = 'Your account has been suspended.';
+            if (userProfile.suspendedUntil != null) {
+              final date = userProfile.suspendedUntil!.toLocal();
+              message += '\nUntil: ${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+            }
+            if (userProfile.suspensionReason != null && userProfile.suspensionReason!.isNotEmpty) {
+              message += '\nReason: ${userProfile.suspensionReason}';
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(message),
+                duration: const Duration(seconds: 10),
+                backgroundColor: Colors.red.shade900,
+                action: SnackBarAction(label: 'OK', textColor: Colors.white, onPressed: () {}),
+              ),
+            );
+          }
+          return;
+        }
+
+        if (userProfile.mustChangePassword) {
+          if (mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (c) => ChangePasswordScreen(user: userProfile),
+              ),
+            );
+          }
+          return;
+        }
+
         final metadata = sbUser.userMetadata ?? {};
         final userTypeStr = metadata['user_type'] ?? 'buyer';
         final fullName = metadata['full_name'] ?? 'User';

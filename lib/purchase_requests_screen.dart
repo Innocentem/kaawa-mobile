@@ -8,6 +8,8 @@ import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 
+import 'package:kaawa/data/supabase_service.dart';
+
 class PurchaseRequestsScreen extends StatefulWidget {
   final kaawa.User farmer;
   const PurchaseRequestsScreen({super.key, required this.farmer});
@@ -18,15 +20,16 @@ class PurchaseRequestsScreen extends StatefulWidget {
 
 class _PurchaseRequestsScreenState extends State<PurchaseRequestsScreen> {
   late Future<List<Message>> _purchaseRequestsFuture;
+  final SupabaseService _supabaseService = SupabaseService.instance;
 
   @override
   void initState() {
     super.initState();
-    _purchaseRequestsFuture = DatabaseHelper.instance.getPurchaseRequestsForFarmer(widget.farmer.id!);
+    _purchaseRequestsFuture = _supabaseService.getPurchaseRequestsForFarmer(widget.farmer.id!);
   }
 
   Future<kaawa.User?> _getBuyerInfo(String buyerId) async {
-    return await DatabaseHelper.instance.getUser(buyerId);
+    return await _supabaseService.getProfile(buyerId);
   }
 
   Widget _buildPurchaseRequestCard(BuildContext context, Message message, kaawa.User? buyer, ThemeData theme) {
@@ -50,7 +53,7 @@ class _PurchaseRequestsScreenState extends State<PurchaseRequestsScreen> {
                 ),
               ).then((_) {
                 setState(() {
-                  _purchaseRequestsFuture = DatabaseHelper.instance.getPurchaseRequestsForFarmer(widget.farmer.id!);
+                  _purchaseRequestsFuture = _supabaseService.getPurchaseRequestsForFarmer(widget.farmer.id!);
                 });
               });
             }
