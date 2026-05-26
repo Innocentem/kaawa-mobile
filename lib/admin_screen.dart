@@ -55,7 +55,14 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin')),
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: _authenticated ? FutureBuilder<List<Map<String, dynamic>>>(
@@ -64,27 +71,52 @@ class _AdminScreenState extends State<AdminScreen> {
             if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
             final rows = snap.data ?? [];
             if (rows.isEmpty) return const Center(child: Text('No pending password reset requests'));
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView.builder(
-                itemCount: rows.length,
-                itemBuilder: (context, i) {
-                  final r = rows[i];
-                  return ListTile(
-                    title: Text(r['phoneNumber'] ?? ''),
-                    subtitle: Text('Requested: ${r['requestedAt'] ?? ''}'),
-                    trailing: ElevatedButton(
-                      onPressed: () => _handleReset(r['id'] as int, r['phoneNumber'] as String),
-                      child: const Text('Reset'),
+            final theme = Theme.of(context);
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Text(
+                    'Admin Panel',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
-                  );
-                },
-              ),
+                  ),
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: _refresh,
+                    child: ListView.builder(
+                      itemCount: rows.length,
+                      itemBuilder: (context, i) {
+                        final r = rows[i];
+                        return ListTile(
+                          title: Text(r['phoneNumber'] ?? ''),
+                          subtitle: Text('Requested: ${r['requestedAt'] ?? ''}'),
+                          trailing: ElevatedButton(
+                            onPressed: () => _handleReset(r['id'] as int, r['phoneNumber'] as String),
+                            child: const Text('Reset'),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             );
           },
         ) : Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 24.0),
+              child: Text(
+                'Admin Login',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
             TextField(
               controller: _phoneController,
               decoration: const InputDecoration(labelText: 'Admin phone'),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
@@ -8,7 +9,7 @@ import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/interested_buyers_screen.dart';
 import 'package:kaawa/widgets/listing_image.dart';
 import 'package:kaawa/widgets/listing_carousel.dart';
-import 'package:kaawa/widgets/compact_loader.dart';
+import 'package:kaawa/widgets/shimmer_skeleton.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -39,7 +40,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.error.withAlpha((0.9 * 255).round()),
+        color: theme.colorScheme.error.withValues(alpha: 0.9),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
@@ -80,6 +81,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
       farmerId: stock.farmerId,
       coffeeType: stock.coffeeType,
       quantity: stock.quantity,
+      quantityRemaining: !stock.isSold ? 0 : stock.quantity,
       pricePerKg: stock.pricePerKg,
       coffeePicturePath: stock.coffeePicturePath,
       description: stock.description,
@@ -192,15 +194,31 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: theme.colorScheme.primary,
-        foregroundColor: theme.colorScheme.onPrimary,
-        iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-        actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-        title: const Text('Manage Stock'),
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: AppBar(
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.8),
+              elevation: 0,
+              foregroundColor: theme.colorScheme.onPrimary,
+              iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+              actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+              title: Image.asset(
+                'assets/icons/pngwing.png',
+                height: 32,
+                fit: BoxFit.contain,
+              ),
+              centerTitle: true,
+            ),
+          ),
+        ),
       ),
       body: Column(
         children: [
+          SizedBox(height: MediaQuery.of(context).padding.top + kToolbarHeight),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Row(
@@ -209,7 +227,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                 const SizedBox(width: 6),
                 Tooltip(
                   message: 'Edit a listing or mark it sold. Tap group to see interested buyers.',
-                  child: Icon(Icons.info_outline, size: 18, color: IconTheme.of(context).color ?? theme.colorScheme.primary),
+                  child: Icon(Icons.info_outline, size: 18, color: theme.colorScheme.primary),
                 ),
               ],
             ),
@@ -219,7 +237,14 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
               stream: _stockStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: SizedBox(width: double.infinity, height: 200, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading listings'))));
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: 5,
+                    itemBuilder: (_, __) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: ShimmerSkeleton.rect(height: 80, borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
                 } else if (snapshot.hasError) {
                   return const Center(child: Text('Error loading stock.'));
                 } else {
@@ -230,21 +255,28 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                   return stockItems.isEmpty
                       ? const Center(child: Text('No stock yet.'))
                       : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           itemCount: stockItems.length,
                           itemBuilder: (context, index) {
                             final stock = stockItems[index];
                             final firstImage = _parseImages(stock.coffeePicturePath).first;
                             return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 2,
                               child: ListTile(
-                                tileColor: stock.isSold ? theme.colorScheme.error.withAlpha((0.08 * 255).round()) : null,
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                tileColor: stock.isSold ? theme.colorScheme.error.withValues(alpha: 0.08) : null,
                                 leading: firstImage != null
                                     ? SizedBox(
                                         width: 44,
                                         height: 44,
                                         child: ClipRRect(
                                           borderRadius: BorderRadius.circular(6),
-                                          child: ListingImage(path: firstImage, fit: BoxFit.cover),
+                                          child: Hero(
+                                            tag: 'stock_manage_${stock.id}',
+                                            child: ListingImage(path: firstImage, fit: BoxFit.cover),
+                                          ),
                                         ),
                                       )
                                     : const Icon(Icons.image, size: 40),
@@ -297,7 +329,7 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => InterestedBuyersScreen(farmer: widget.farmer, stock: stock),
+                                                  builder: (context) => InterestedBuyersScreen(currentUser: widget.farmer, stock: stock),
                                                 ),
                                               );
                                             },
@@ -363,6 +395,7 @@ class _StockDialog extends StatefulWidget {
 class _StockDialogState extends State<_StockDialog> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _quantityController;
+  late TextEditingController _quantityRemainingController;
   late TextEditingController _pricePerKgController;
   late TextEditingController _descriptionController;
   final TextEditingController _otherCoffeeTypeController = TextEditingController();
@@ -386,6 +419,9 @@ class _StockDialogState extends State<_StockDialog> {
   void initState() {
     super.initState();
     _quantityController = TextEditingController(text: widget.stock?.quantity.toString());
+    _quantityRemainingController = TextEditingController(
+      text: (widget.stock?.quantityRemaining ?? widget.stock?.quantity)?.toString()
+    );
     _pricePerKgController = TextEditingController(text: widget.stock?.pricePerKg.toString());
     _descriptionController = TextEditingController(text: widget.stock?.description ?? '');
     _coffeePicturePath = widget.stock?.coffeePicturePath;
@@ -403,6 +439,10 @@ class _StockDialogState extends State<_StockDialog> {
 
   @override
   void dispose() {
+    _quantityController.dispose();
+    _quantityRemainingController.dispose();
+    _pricePerKgController.dispose();
+    _descriptionController.dispose();
     _otherCoffeeTypeController.dispose();
     super.dispose();
   }
@@ -509,6 +549,7 @@ class _StockDialogState extends State<_StockDialog> {
         farmerId: widget.farmerId,
         coffeeType: coffeeType,
         quantity: double.parse(_quantityController.text),
+        quantityRemaining: double.parse(_quantityRemainingController.text),
         pricePerKg: double.parse(_pricePerKgController.text),
         coffeePicturePath: finalImagePath,
         description: _descriptionController.text,
@@ -593,49 +634,92 @@ class _StockDialogState extends State<_StockDialog> {
                             fillColor: theme.brightness == Brightness.light
                                 ? theme.colorScheme.surfaceVariant.withAlpha(230)
                                 : theme.colorScheme.surfaceVariant.withAlpha(120),
-                            border: const OutlineInputBorder(),
-                          ),
-                          validator: (value) => (value == null || value.isEmpty) ? 'Please select the coffee type' : null,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        if (_selectedCoffeeType == 'Other')
-                          TextFormField(
-                            controller: _otherCoffeeTypeController,
-                            decoration: const InputDecoration(labelText: 'Other Coffee Type'),
-                            validator: (value) {
-                              if (_selectedCoffeeType == 'Other' && (value == null || value.trim().isEmpty)) {
-                                return 'Please specify the coffee type';
-                              }
-                              return null;
-                            },
-                          ),
+                        validator: (value) => (value == null || value.isEmpty) ? 'Please select the coffee type' : null,
+                      ),
+                      if (_selectedCoffeeType == 'Other') ...[
+                        const SizedBox(height: 12),
                         TextFormField(
-                          controller: _quantityController,
-                          decoration: const InputDecoration(labelText: 'Quantity (in Kgs)'),
-                          keyboardType: TextInputType.number,
+                          controller: _otherCoffeeTypeController,
+                          decoration: InputDecoration(
+                            labelText: 'Other Coffee Type',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                           validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter the quantity';
+                            if (_selectedCoffeeType == 'Other' && (value == null || value.trim().isEmpty)) {
+                              return 'Please specify the coffee type';
                             }
                             return null;
                           },
                         ),
-                        TextFormField(
-                          controller: _pricePerKgController,
-                          decoration: const InputDecoration(labelText: 'Price per Kg (in UGX)'),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter the price per Kg';
-                            }
-                            return null;
-                          },
+                      ],
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _quantityController,
+                        decoration: InputDecoration(
+                          labelText: 'Original Total Quantity (in Kgs)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _descriptionController,
-                          decoration: const InputDecoration(labelText: 'Description'),
-                          maxLines: 3,
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter the total quantity';
+                          }
+                          if (double.tryParse(value) == null) {
+                            return 'Please enter a valid number';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _quantityRemainingController,
+                        decoration: InputDecoration(
+                          labelText: 'Quantity Remaining (in Kgs)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          helperText: 'Update this as you sell offline',
                         ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter remaining quantity';
+                          }
+                          final remaining = double.tryParse(value);
+                          if (remaining == null) {
+                            return 'Please enter a valid number';
+                          }
+                          final total = double.tryParse(_quantityController.text);
+                          if (total != null && remaining > total) {
+                            return 'Remaining cannot exceed total';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _pricePerKgController,
+                        decoration: InputDecoration(
+                          labelText: 'Price per Kg (in UGX)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return 'Please enter the price per Kg';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _descriptionController,
+                        decoration: InputDecoration(
+                          labelText: 'Description',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        maxLines: 3,
+                      ),
                         const SizedBox(height: 16),
                         _buildImagePicker(),
                       ],
@@ -699,11 +783,20 @@ class _StockDialogState extends State<_StockDialog> {
             height: 100,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceVariant.withAlpha(100),
+              color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.dividerColor),
+              border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
             ),
-            child: const Center(child: Text('No images selected')),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.image_outlined, size: 32, color: theme.hintColor),
+                  const SizedBox(height: 4),
+                  Text('No images selected', style: TextStyle(color: theme.hintColor)),
+                ],
+              ),
+            ),
           ),
         const SizedBox(height: 8),
         SizedBox(

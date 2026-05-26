@@ -7,6 +7,10 @@ import 'package:kaawa/welcome_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:kaawa/widgets/chat_overlay_manager.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
+import 'package:kaawa/auth_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -177,7 +181,7 @@ class MyApp extends StatelessWidget {
           ),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
-            fillColor: const Color(0xFF1C0A04).withOpacity(0.5),
+            fillColor: const Color(0xFF1C0A04).withValues(alpha: 0.5),
             contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF5D4037))),
@@ -202,21 +206,36 @@ class MyApp extends StatelessWidget {
           final isDark = Theme.of(context).brightness == Brightness.dark;
           if (child == null) return const SizedBox.shrink();
 
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                isDark ? 'assets/images/bg.jpg' : 'assets/images/white.jpg',
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                excludeFromSemantics: true,
-              ),
-              if (!isDark)
-                Container(
-                  color: const Color(0xFFFFFFFF).withAlpha((0.08 * 255).round()),
-                ),
-              child,
-            ],
+          return StreamBuilder<kaawa.User?>(
+            stream: AuthService().currentUserDataStream,
+            builder: (context, snapshot) {
+              final currentUser = snapshot.data;
+              Widget content = child;
+
+              if (currentUser != null) {
+                content = ChatOverlayManager(
+                  currentUser: currentUser,
+                  child: child,
+                );
+              }
+
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Image.asset(
+                    isDark ? 'assets/images/bg.jpg' : 'assets/images/white.jpg',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                    excludeFromSemantics: true,
+                  ),
+                  if (!isDark)
+                    Container(
+                      color: const Color(0xFFFFFFFF).withAlpha((0.08 * 255).round()),
+                    ),
+                  content,
+                ],
+              );
+            },
           );
         },
       ),

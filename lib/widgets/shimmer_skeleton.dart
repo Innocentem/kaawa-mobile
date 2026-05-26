@@ -29,8 +29,8 @@ class ShimmerSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.6 : 0.25);
-    final highlight = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.85 : 0.6);
+    final base = theme.colorScheme.surface.withValues(alpha: theme.brightness == Brightness.dark ? 0.6 : 0.25);
+    final highlight = theme.colorScheme.surface.withValues(alpha: theme.brightness == Brightness.dark ? 0.85 : 0.6);
     final bg = theme.colorScheme.surface;
     return Shimmer.fromColors(
       baseColor: base,

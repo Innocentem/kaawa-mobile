@@ -18,13 +18,30 @@ class ContactAdminScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Contact Admin')),
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Admin contact'),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text(
+                  'Contact Admin',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
             const SizedBox(height: 8),
             if (currentUser == null)
               ListTile(

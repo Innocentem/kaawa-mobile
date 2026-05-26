@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/review_data.dart';
-import 'package:kaawa/data/user_data.dart' as kaawa;
-import 'package:kaawa/data/database_helper.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
+import 'package:kaawa/data/user_data.dart' as kaawa;
 
 class ViewReviewsScreen extends StatefulWidget {
   final kaawa.User reviewedUser;
@@ -19,7 +20,7 @@ class ViewReviewsScreen extends StatefulWidget {
 }
 
 class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
-  // Each item will be a map: { 'review': Review, 'reviewer': User? }
+  // Each item will be a map: { 'review': Review, 'reviewer': User?, 'coffeeStock': CoffeeStock? }
   late Future<List<Map<String, dynamic>>> _reviewsFuture;
 
   @override
@@ -29,17 +30,21 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
   }
 
   Future<List<Map<String, dynamic>>> _getReviewsWithUsers() async {
-    // use optimized JOIN helper
-    final rows = await DatabaseHelper.instance.getReviewsWithReviewers(widget.reviewedUser.id!);
-    // each row: { 'review': {id, reviewerId, reviewedUserId, rating, reviewText}, 'reviewer': User? }
-    return rows;
+    // use Supabase service
+    return await SupabaseService.instance.getReviewsForUserWithReviewers(widget.reviewedUser.id!);
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text('Reviews for ${widget.reviewedUser.fullName}'),
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _reviewsFuture,
@@ -50,17 +55,40 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
             return const Center(child: Text('Error loading reviews.'));
           } else {
             final entries = snapshot.data ?? [];
-            return entries.isEmpty
-                ? const Center(child: Text('No reviews yet.'))
-                : ListView.builder(
-                    itemCount: entries.length,
-                    itemBuilder: (context, index) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Text(
+                    'User Reviews',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(
+                    'Reviews for ${widget.reviewedUser.fullName}',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: entries.isEmpty
+                      ? const Center(child: Text('No reviews yet.'))
+                      : ListView.builder(
+                          itemCount: entries.length,
+                          itemBuilder: (context, index) {
                       final entry = entries[index];
-                      final reviewMap = entry['review'] as Map<String, dynamic>;
-                      final reviewer = entry['reviewer'] as dynamic; // may be User or null
-                      final ratingVal = reviewMap['rating'];
-                      final rating = ratingVal is num ? ratingVal.toDouble() : double.tryParse(ratingVal?.toString() ?? '') ?? 0.0;
-                      final reviewText = reviewMap['reviewText']?.toString() ?? '';
+                      final review = entry['review'] as Review;
+                      final reviewer = entry['reviewer'] as kaawa.User?;
+                      final coffeeStock = entry['coffeeStock'] as CoffeeStock?;
+                      final rating = review.rating;
+                      final reviewText = review.comment;
                       return Card(
                         margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                         child: Padding(
@@ -97,13 +125,23 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
                                       child: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text(reviewer?.fullName ?? 'Unknown', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                          Text(reviewer?.fullName ?? 'Unknown', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                                          if (coffeeStock != null) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              'Listing: ${coffeeStock.coffeeType}',
+                                              style: theme.textTheme.labelSmall?.copyWith(
+                                                color: theme.colorScheme.primary,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
                                           const SizedBox(height: 6),
                                           Row(
                                             children: List.generate(5, (starIndex) {
                                               return Icon(
                                                 starIndex < rating ? Icons.star : Icons.star_border,
-                                                color: IconTheme.of(context).color ?? Theme.of(context).colorScheme.secondary,
+                                                color: IconTheme.of(context).color ?? theme.colorScheme.secondary,
                                                 size: 18,
                                               );
                                             }),
@@ -121,7 +159,10 @@ class _ViewReviewsScreenState extends State<ViewReviewsScreen> {
                         ),
                       );
                     },
-                  );
+                  ),
+                ),
+              ],
+            );
           }
         },
       ),

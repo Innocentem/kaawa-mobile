@@ -201,7 +201,74 @@ class SupabaseService {
         .eq('id', stock.id!);
   }
 
+  Future<void> updateCoffeeStockQuantity(String stockId, double quantitySold) async {
+    final stock = await getCoffeeStockById(stockId);
+    if (stock == null) return;
+
+    final newRemaining = (stock.quantityRemaining - quantitySold).clamp(0.0, stock.quantity).toDouble();
+    final isSold = newRemaining <= 0;
+
+    await _supabase
+        .from('coffee_stock')
+        .update({
+          'quantity_remaining': newRemaining,
+          'is_sold': isSold,
+        })
+        .eq('id', stockId);
+  }
+
   // Reviews
+  Future<List<Map<String, dynamic>>> getReviewsForUserWithReviewers(String userId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select('*, profiles!reviewer_id(*), coffee_stock(*)')
+        .eq('reviewed_user_id', userId)
+        .order('created_at', ascending: false);
+    return (response as List).map((map) {
+      return {
+        'review': Review.fromMap(map),
+        'reviewer': map['profiles'] != null ? kaawa.User.fromMap(map['profiles']) : null,
+        'coffeeStock': map['coffee_stock'] != null ? CoffeeStock.fromMap(map['coffee_stock']) : null,
+      };
+    }).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getReviewsForProductWithReviewers(String stockId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select('*, profiles!reviewer_id(*)')
+        .eq('coffee_stock_id', stockId)
+        .order('created_at', ascending: false);
+    return (response as List).map((map) {
+      return {
+        'review': Review.fromMap(map),
+        'reviewer': map['profiles'] != null ? kaawa.User.fromMap(map['profiles']) : null,
+      };
+    }).toList();
+  }
+
+  Future<List<Review>> getReviewsForUser(String userId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select()
+        .eq('reviewed_user_id', userId)
+        .order('created_at', ascending: false);
+    return (response as List).map((m) => Review.fromMap(m)).toList();
+  }
+
+  Future<List<Review>> getReviewsForProduct(String stockId) async {
+    final response = await _supabase
+        .from('reviews')
+        .select()
+        .eq('coffee_stock_id', stockId)
+        .order('created_at', ascending: false);
+    return (response as List).map((m) => Review.fromMap(m)).toList();
+  }
+
+  Future<void> insertReview(Review review) async {
+    await _supabase.from('reviews').insert(review.toMap());
+  }
+
   Future<bool> hasReviewByUser(String reviewerId, String reviewedUserId) async {
     final response = await _supabase
         .from('reviews')
@@ -212,162 +279,125 @@ class SupabaseService {
     return response != null;
   }
 
-  Future<void> insertReview(Review review) async {
+  Future<bool> hasReviewForProduct(String reviewerId, String stockId) async {
     final response = await _supabase
         .from('reviews')
-        .insert(review.toMap())
-        .select()
-        .single();
-
-    await _supabase.from('review_notifications').insert({
-      'recipient_id': review.reviewedUserId,
-      'sender_id': review.reviewerId,
-      'review_id': response['id'],
-      'message': 'left you a review',
-      'is_read': false,
-    });
+        .select('id')
+        .eq('reviewer_id', reviewerId)
+        .eq('coffee_stock_id', stockId)
+        .maybeSingle();
+    return response != null;
   }
 
-  Future<int> getUnreadReviewNotificationCount(String userId) async {
+  Future<Map<String, dynamic>> getRatingSummaryForUser(String userId) async {
+    final reviews = await getReviewsForUser(userId);
+    if (reviews.isEmpty) {
+      return {
+        'averageRating': 0.0,
+        'reviewCount': 0,
+      };
+    }
+    final sum = reviews.fold(0.0, (prev, r) => prev + r.rating);
+    return {
+      'averageRating': sum / reviews.length,
+      'reviewCount': reviews.length,
+    };
+  }
+
+  Future<double> getAverageRatingForProduct(String stockId) async {
+    final reviews = await getReviewsForProduct(stockId);
+    if (reviews.isEmpty) return 0.0;
+    final sum = reviews.fold(0.0, (prev, r) => prev + r.rating);
+    return sum / reviews.length;
+  }
+
+  // Notifications
+  Stream<int> getUnreadNotificationCountStream(String userId) {
+    return _supabase
+        .from('notifications')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', userId)
+        .map((list) => list.where((row) => row['is_read'] == false).length);
+  }
+
+  Future<int> getUnreadNotificationCount(String userId) async {
     final response = await _supabase
-        .from('review_notifications')
+        .from('notifications')
         .select('id')
-        .eq('recipient_id', userId)
+        .eq('user_id', userId)
         .eq('is_read', false);
     return (response as List).length;
   }
 
-  Future<List<Map<String, dynamic>>> getReviewNotifications(
-      String reviewedUserId) async {
+  Future<List<Map<String, dynamic>>> getNotifications(String userId) async {
     final response = await _supabase
-        .from('review_notifications')
-        .select('*, reviews(*, profiles:reviewer_id(*))')
-        .eq('recipient_id', reviewedUserId)
+        .from('notifications')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    return (response as List).map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    await _supabase
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('id', id);
+  }
+
+  Future<void> markReviewNotificationRead(dynamic id) async {
+    await _supabase
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('id', id);
+  }
+
+  Future<List<Map<String, dynamic>>> getReviewNotifications(String userId) async {
+    final response = await _supabase
+        .from('notifications')
+        .select()
+        .eq('user_id', userId)
+        .eq('type', 'review')
         .order('created_at', ascending: false);
 
-    return (response as List).map((row) {
-      final reviewData = row['reviews'];
-      final reviewerData = reviewData['profiles'];
+    final List<Map<String, dynamic>> result = [];
+    for (final n in (response as List)) {
+      final metadata = n['metadata'] as Map<String, dynamic>?;
+      if (metadata == null || metadata['review_id'] == null) continue;
 
-      return {
-        'notification': {
-          'id': row['id'],
-          'isRead': row['is_read'],
-          'createdAt': row['created_at'],
-        },
-        'review': {
-          'id': reviewData['id'],
-          'reviewerId': reviewData['reviewer_id'],
-          'reviewedUserId': reviewData['reviewed_user_id'],
-          'rating': reviewData['rating'],
-          'reviewText': reviewData['review_text'],
-        },
-        'reviewer': kaawa.User.fromMap(reviewerData),
-      };
-    }).toList();
+      final reviewData = await _supabase
+          .from('reviews')
+          .select()
+          .eq('id', metadata['review_id'])
+          .maybeSingle();
+
+      if (reviewData != null) {
+        final reviewer = await getProfile(metadata['reviewer_id']);
+        final coffeeStockId = reviewData['coffee_stock_id'];
+        CoffeeStock? coffeeStock;
+        if (coffeeStockId != null) {
+          coffeeStock = await getCoffeeStockById(coffeeStockId.toString());
+        }
+
+        result.add({
+          'notification': n,
+          'review': reviewData,
+          'reviewer': reviewer,
+          'coffeeStock': coffeeStock,
+        });
+      }
+    }
+    return result;
   }
 
-  Future<void> markAllReviewNotificationsRead(String reviewedUserId) async {
+  Future<void> markAllNotificationsRead(String userId) async {
     await _supabase
-        .from('review_notifications')
-        .update({'is_read': true}).eq('recipient_id', reviewedUserId);
-  }
-
-  Future<Map<String, dynamic>> getRatingSummaryForUser(String userId) async {
-    final response = await _supabase
-        .from('reviews')
-        .select('rating')
-        .eq('reviewed_user_id', userId);
-
-    final reviews = response as List;
-    if (reviews.isEmpty) return {'avg': 0.0, 'count': 0};
-
-    final sum = reviews.fold<double>(
-        0, (prev, element) => prev + (element['rating'] as num).toDouble());
-    return {'avg': sum / reviews.length, 'count': reviews.length};
-  }
-
-  // Interests
-  Future<List<String>> getInterestedStockIdsForBuyer(String buyerId) async {
-    final response = await _supabase
-        .from('interested_buyers')
-        .select('coffee_stock_id')
-        .eq('buyer_id', buyerId);
-    return (response as List)
-        .map((m) => m['coffee_stock_id'].toString())
-        .toList();
-  }
-
-  Future<int> getInterestCountForStock(String stockId) async {
-    final response = await _supabase
-        .from('interested_buyers')
-        .select('id')
-        .eq('coffee_stock_id', stockId);
-    return (response as List).length;
-  }
-
-  Future<void> addInterest(String stockId, String buyerId) async {
-    await _supabase.from('interested_buyers').insert({
-      'coffee_stock_id': stockId,
-      'buyer_id': buyerId,
-    });
-  }
-
-  Future<void> removeInterest(String stockId, String buyerId) async {
-    await _supabase
-        .from('interested_buyers')
-        .delete()
-        .eq('coffee_stock_id', stockId)
-        .eq('buyer_id', buyerId);
-  }
-
-  Future<int> getTotalInterestCountForFarmer(String farmerId) async {
-    final stocksResponse = await _supabase
-        .from('coffee_stock')
-        .select('id')
-        .eq('farmer_id', farmerId)
-        .eq('is_sold', false);
-
-    final stockIds = (stocksResponse as List).map((s) => s['id']).toList();
-    if (stockIds.isEmpty) return 0;
-
-    final response = await _supabase
-        .from('interested_buyers')
-        .select('id')
-        .inFilter('coffee_stock_id', stockIds)
-        .eq('seen_by_farmer', false);
-    return (response as List).length;
-  }
-
-  Future<List<kaawa.User>> getInterestedBuyersForStock(String stockId) async {
-    final response = await _supabase
-        .from('interested_buyers')
-        .select('profiles(*)')
-        .eq('coffee_stock_id', stockId);
-
-    return (response as List)
-        .map((m) => kaawa.User.fromMap(m['profiles']))
-        .toList();
-  }
-
-  Future<void> markInterestsAsSeenForStock(String stockId) async {
-    await _supabase
-        .from('interested_buyers')
-        .update({'seen_by_farmer': true}).eq('coffee_stock_id', stockId);
+        .from('notifications')
+        .update({'is_read': true})
+        .eq('user_id', userId);
   }
 
   // Favorites
-  Future<List<kaawa.User>> getFavorites(String userId) async {
-    final response = await _supabase
-        .from('favorites')
-        .select('profiles!favorites_favorite_user_id_fkey(*)')
-        .eq('user_id', userId);
-
-    return (response as List)
-        .map((m) => kaawa.User.fromMap(m['profiles']))
-        .toList();
-  }
-
   Future<void> addFavorite(String userId, String favoriteUserId) async {
     await _supabase.from('favorites').insert({
       'user_id': userId,
@@ -383,15 +413,126 @@ class SupabaseService {
         .eq('favorite_user_id', favoriteUserId);
   }
 
-  // Conversations & Messages
+  Future<bool> isFavorite(String userId, String favoriteUserId) async {
+    final response = await _supabase
+        .from('favorites')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('favorite_user_id', favoriteUserId)
+        .maybeSingle();
+    return response != null;
+  }
+
+  Future<List<kaawa.User>> getFavorites(String userId) async {
+    final response = await _supabase
+        .from('favorites')
+        .select('profiles!favorites_favorite_user_id_fkey(*)')
+        .eq('user_id', userId);
+    
+    return (response as List).map((row) => kaawa.User.fromMap(row['profiles'])).toList();
+  }
+
+  // Interested Buyers
+  Future<void> toggleInterest(String stockId, String buyerId) async {
+    final existing = await _supabase
+        .from('interested_buyers')
+        .select('id')
+        .eq('coffee_stock_id', stockId)
+        .eq('buyer_id', buyerId)
+        .maybeSingle();
+
+    if (existing == null) {
+      await _supabase.from('interested_buyers').insert({
+        'coffee_stock_id': stockId,
+        'buyer_id': buyerId,
+      });
+    } else {
+      await _supabase
+          .from('interested_buyers')
+          .delete()
+          .eq('id', existing['id']);
+    }
+  }
+
+  Future<bool> isInterested(String stockId, String buyerId) async {
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('id')
+        .eq('coffee_stock_id', stockId)
+        .eq('buyer_id', buyerId)
+        .maybeSingle();
+    return response != null;
+  }
+
+  Future<List<String>> getInterestedStockIdsForBuyer(String buyerId) async {
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('coffee_stock_id')
+        .eq('buyer_id', buyerId);
+    return (response as List).map((r) => r['coffee_stock_id'].toString()).toList();
+  }
+
+  Future<int> getInterestCountForStock(String stockId) async {
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('id')
+        .eq('coffee_stock_id', stockId);
+    return (response as List).length;
+  }
+
+  Future<List<kaawa.User>> getInterestedBuyersForStock(String stockId) async {
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('profiles(*)')
+        .eq('coffee_stock_id', stockId);
+    return (response as List).map((row) => kaawa.User.fromMap(row['profiles'])).toList();
+  }
+
+  Future<int> getTotalInterestCountForFarmer(String farmerId) async {
+    final stocks = await getCoffeeStockByFarmer(farmerId);
+    int total = 0;
+    for (final s in stocks) {
+      if (s.id != null) {
+        total += await getInterestCountForStock(s.id!);
+      }
+    }
+    return total;
+  }
+
+  Future<int> getUnreadInterestedCountForFarmer(String farmerId) async {
+    final stocks = await getCoffeeStockByFarmer(farmerId);
+    if (stocks.isEmpty) return 0;
+    
+    final stockIds = stocks.map((s) => s.id).whereType<String>().toList();
+    if (stockIds.isEmpty) return 0;
+
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('id')
+        .inFilter('coffee_stock_id', stockIds)
+        .eq('seen_by_farmer', false);
+    
+    return (response as List).length;
+  }
+
+  Future<void> markInterestsAsSeen(String stockId) async {
+    await _supabase
+        .from('interested_buyers')
+        .update({'seen_by_farmer': true})
+        .eq('coffee_stock_id', stockId)
+        .eq('seen_by_farmer', false);
+  }
+
+  // Messages / Conversations
   Future<List<Conversation>> getConversations(String userId) async {
     final response = await _supabase
         .from('messages')
-        .select('*, profiles:sender_id(*), receiver:receiver_id(*)')
+        .select('*, sender:profiles!messages_sender_id_fkey(*), receiver:profiles!messages_receiver_id_fkey(*)')
         .or('sender_id.eq.$userId,receiver_id.eq.$userId')
         .order('created_at', ascending: false);
 
     final messages = (response as List).map((m) => Message.fromMap(m)).toList();
+
     final Map<String, Message> latestMessages = {};
     final Map<String, kaawa.User> otherUsers = {};
 
@@ -399,13 +540,12 @@ class SupabaseService {
       final otherId = msg.senderId == userId ? msg.receiverId : msg.senderId;
       if (!latestMessages.containsKey(otherId)) {
         latestMessages[otherId] = msg;
-
-        final msgData =
-            (response as List).firstWhere((element) => element['id'] == msg.id);
+        
+        final msgData = (response as List).firstWhere((element) => element['id'] == msg.id);
         if (msg.senderId == userId) {
           otherUsers[otherId] = kaawa.User.fromMap(msgData['receiver']);
         } else {
-          otherUsers[otherId] = kaawa.User.fromMap(msgData['profiles']);
+          otherUsers[otherId] = kaawa.User.fromMap(msgData['sender']);
         }
       }
     }
@@ -456,6 +596,13 @@ class SupabaseService {
         .eq('is_read', false);
   }
 
+  Future<void> updateMessagePurchaseData(String messageId, String purchaseData) async {
+    await _supabase
+        .from('messages')
+        .update({'purchase_request_data': purchaseData})
+        .eq('id', messageId);
+  }
+
   Future<void> sendMessage(Message message) async {
     await _supabase.from('messages').insert(message.toMap());
   }
@@ -481,6 +628,39 @@ class SupabaseService {
         .eq('receiver_id', farmerId)
         .eq('is_purchase_request', true)
         .eq('is_read', false);
+  }
+
+  Future<int> getPurchaseRequestCountForFarmer(String farmerId) async {
+    final response = await _supabase
+        .from('messages')
+        .select('id')
+        .eq('receiver_id', farmerId)
+        .eq('is_purchase_request', true)
+        .eq('is_read', false);
+    return (response as List).length;
+  }
+
+  Future<List<Message>> getPurchaseHistory(String userId) async {
+    final response = await _supabase
+        .from('messages')
+        .select()
+        .eq('sender_id', userId)
+        .eq('is_purchase_request', true)
+        .order('created_at', ascending: false);
+
+    return (response as List).map((m) => Message.fromMap(m)).toList();
+  }
+
+  Stream<List<Message>> getPurchaseHistoryStream(String userId) {
+    return _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('sender_id', userId)
+        .map((data) => data
+            .where((m) => m['is_purchase_request'] == true)
+            .map((m) => Message.fromMap(m))
+            .toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp)));
   }
 
   // Streams
@@ -511,20 +691,10 @@ class SupabaseService {
         });
   }
 
-  Stream<int> getUnreadReviewNotificationCountStream(String userId) {
-    return _supabase
-        .from('review_notifications')
-        .stream(primaryKey: ['id'])
-        .eq('recipient_id', userId)
-        .map((data) => data
-            .where((m) => m['is_read'] == false || m['is_read'] == 0)
-            .length);
-  }
-
   Stream<int> getInterestedCountStreamForFarmer(String farmerId) {
     return _supabase.from('interested_buyers').stream(primaryKey: [
       'id'
-    ]).asyncMap((_) => getTotalInterestCountForFarmer(farmerId));
+    ]).asyncMap((_) => getUnreadInterestedCountForFarmer(farmerId));
   }
 
   Stream<int> getPurchaseRequestCountStreamForFarmer(String farmerId) {
@@ -649,6 +819,15 @@ class SupabaseService {
     });
   }
 
+  Future<List<kaawa.User>> getUnseenInterestedBuyersForStock(String stockId) async {
+    final response = await _supabase
+        .from('interested_buyers')
+        .select('profiles(*)')
+        .eq('coffee_stock_id', stockId)
+        .eq('seen_by_farmer', false);
+    return (response as List).map((row) => kaawa.User.fromMap(row['profiles'])).toList();
+  }
+
   Stream<Map<String, List<kaawa.User>>> getInterestedBuyersByStockStream(
       String farmerId) {
     return _supabase
@@ -659,7 +838,7 @@ class SupabaseService {
 
       await Future.wait(stocks.map((s) async {
         if (s.id != null) {
-          final buyers = await getInterestedBuyersForStock(s.id!);
+          final buyers = await getUnseenInterestedBuyersForStock(s.id!);
           if (buyers.isNotEmpty) {
             map[s.id!] = buyers;
           }
@@ -668,6 +847,24 @@ class SupabaseService {
 
       return map;
     });
+  }
+
+  Stream<Message> getNewMessagesStream(String userId) {
+    return _supabase
+        .from('messages')
+        .stream(primaryKey: ['id'])
+        .eq('receiver_id', userId)
+        .map((data) {
+          if (data.isEmpty) return null;
+          final unread = data.where((m) => m['is_read'] == false || m['is_read'] == 0).toList();
+          if (unread.isEmpty) return null;
+          
+          final newest = unread.map((m) => Message.fromMap(m)).toList();
+          newest.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          return newest.first;
+        })
+        .where((m) => m != null)
+        .cast<Message>();
   }
 
   // Activity Log

@@ -52,6 +52,19 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   void _updateQuantity(String stockId, double newQuantity) {
+    if (_localCart.containsKey(stockId)) {
+      final item = _localCart[stockId]!;
+      if (newQuantity > item.stock.quantityRemaining) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Only ${item.stock.quantityRemaining} Kg available'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+        newQuantity = item.stock.quantityRemaining;
+      }
+    }
+
     setState(() {
       if (newQuantity <= 0) {
         _localCart.remove(stockId);
@@ -145,6 +158,43 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _submitPurchaseRequest(CartItem item, String message) async {
     try {
+      // Fetch latest stock to validate quantity before sending request
+      final latestStock = await SupabaseService.instance.getCoffeeStockById(item.stock.id!);
+      
+      if (latestStock == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This product is no longer available.')),
+          );
+          setState(() {
+            _localCart.remove(item.stock.id);
+          });
+        }
+        return;
+      }
+
+      if (latestStock.isSold || latestStock.quantityRemaining <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('This product is now SOLD OUT.')),
+          );
+          setState(() {
+            _localCart.remove(item.stock.id);
+          });
+        }
+        return;
+      }
+
+      if (item.quantityKg > latestStock.quantityRemaining) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Insufficient stock. Only ${latestStock.quantityRemaining} Kg left.')),
+          );
+          _updateQuantity(item.stock.id!, latestStock.quantityRemaining);
+        }
+        return;
+      }
+
       // Create JSON data for the purchase request
       final purchaseData = jsonEncode({
         'items': [
@@ -303,7 +353,12 @@ class _CartScreenState extends State<CartScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Shopping Cart'),
+          title: Image.asset(
+            'assets/icons/pngwing.png',
+            height: 32,
+            fit: BoxFit.contain,
+          ),
+          centerTitle: true,
           elevation: 0,
           backgroundColor: theme.colorScheme.surface,
           foregroundColor: theme.colorScheme.onSurface,
@@ -383,7 +438,9 @@ class _CartScreenState extends State<CartScreen> {
                                   Text('${item.quantityKg} Kg', style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold)),
                                   IconButton(
                                     icon: const Icon(Icons.add),
-                                    onPressed: () => _updateQuantity(item.stock.id!, item.quantityKg + 1),
+                                    onPressed: item.quantityKg < item.stock.quantityRemaining
+                                        ? () => _updateQuantity(item.stock.id!, item.quantityKg + 1)
+                                        : null,
                                     iconSize: 20,
                                     constraints: const BoxConstraints(),
                                     padding: const EdgeInsets.all(4),

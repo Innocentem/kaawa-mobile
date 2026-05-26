@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:kaawa/auth_service.dart';
 import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/conversations_screen.dart';
@@ -20,10 +23,12 @@ import 'package:kaawa/widgets/compact_loader.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
 import 'package:kaawa/product_detail_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:kaawa/review_notifications_screen.dart';
+import 'package:kaawa/notifications_screen.dart';
 import 'package:kaawa/data/supabase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:kaawa/user_selection_screen.dart';
 import 'package:kaawa/utils/date_utils.dart';
+import 'package:kaawa/purchase_history_screen.dart';
 
 class BuyerHomeScreen extends StatefulWidget {
   final kaawa.User buyer;
@@ -44,9 +49,9 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   late AnimationController _animationController;
   late Animation<double> _animation;
   int _unreadMessageCount = 0;
-  int _unreadReviewCount = 0;
+  int _unreadNotificationCount = 0;
   StreamSubscription<int>? _messageSubscription;
-  StreamSubscription<int>? _reviewSubscription;
+  StreamSubscription<int>? _notificationSubscription;
   final AuthService _authService = AuthService();
   final SupabaseService _supabaseService = SupabaseService.instance;
   late kaawa.User _currentBuyer;
@@ -68,7 +73,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     _checkSuspensionAndLogout();
     _coffeeStockStream = _supabaseService.getAllCoffeeStockStream();
     _searchController.addListener(_filterCoffeeStock);
-    _getUnreadReviewCount();
+    _getUnreadNotificationCount();
     _loadCartFromPrefs();
 
     _messageSubscription = _supabaseService.getUnreadMessageCountStream(widget.buyer.id!).listen((count) {
@@ -79,10 +84,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       }
     });
 
-    _reviewSubscription = _supabaseService.getUnreadReviewNotificationCountStream(widget.buyer.id!).listen((count) {
+    _notificationSubscription = _supabaseService.getUnreadNotificationCountStream(widget.buyer.id!).listen((count) {
       if (mounted) {
         setState(() {
-          _unreadReviewCount = count;
+          _unreadNotificationCount = count;
         });
       }
     });
@@ -116,7 +121,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _messageSubscription?.cancel();
-    _reviewSubscription?.cancel();
+    _notificationSubscription?.cancel();
     _animationController.dispose();
     // Do not clear cart on dispose; cart is persisted across sessions unless user clears it
     super.dispose();
@@ -189,10 +194,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     });
   }
 
-  Future<void> _getUnreadReviewCount() async {
-    final count = await _supabaseService.getUnreadReviewNotificationCount(widget.buyer.id!);
+  Future<void> _getUnreadNotificationCount() async {
+    final count = await _supabaseService.getUnreadNotificationCount(widget.buyer.id!);
     if (!mounted) return;
-    setState(() => _unreadReviewCount = count);
+    setState(() => _unreadNotificationCount = count);
   }
 
   Future<List<CoffeeStock>> _getCoffeeStock() async {
@@ -405,9 +410,12 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ProfileScreen(currentUser: _currentBuyer, profileOwner: _currentBuyer),
+        builder: (context) => ProfileScreen(
+          currentUser: _currentBuyer,
+          profileOwner: _currentBuyer,
+        ),
       ),
-    );
+    ).then((_) => _refreshCurrentBuyer());
   }
 
   Future<void> _scheduleOnboardingGuides() async {
@@ -531,7 +539,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     );
   }
 
-  Widget _buildSoldBadge(ThemeData theme) {
+  Widget _buildSoldBadge(ThemeData theme, {bool isSoldOut = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -539,7 +547,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(
-        'SOLD',
+        isSoldOut ? 'SOLD OUT' : 'SOLD',
         style: theme.textTheme.labelSmall?.copyWith(
           color: theme.colorScheme.onError,
           fontWeight: FontWeight.bold,
@@ -556,14 +564,14 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         padding: const EdgeInsets.all(12),
         controller: _searchController,
         placeholder: "Search by coffee type",
-        placeholderStyle: TextStyle(color: theme.hintColor.withOpacity(0.5)),
+        placeholderStyle: TextStyle(color: theme.hintColor.withValues(alpha: 0.5)),
         prefix: Padding(
           padding: const EdgeInsets.only(left: 12.0),
           child: Icon(CupertinoIcons.search, color: theme.colorScheme.primary),
         ),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: theme.colorScheme.surfaceVariant.withOpacity(0.3),
+          color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.3),
         ),
         style: TextStyle(color: theme.colorScheme.onSurface),
       ),
@@ -578,20 +586,21 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            theme.colorScheme.primary.withOpacity(0.7),
+            theme.colorScheme.primary.withValues(alpha: 0.7),
             theme.colorScheme.primary,
           ],
         ),
         borderRadius: BorderRadius.circular(12),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 15),
+      padding: const EdgeInsets.symmetric(vertical: 25, horizontal: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: <Widget>[
           _shortcutItem(theme, "Cart", Icons.shopping_cart, () => _openCart(), badgeCount: _cartItemCount > 0 ? _cartItemCount : null),
           _shortcutItem(theme, "Messages", Icons.message, () => _openMessages(), badgeCount: _unreadMessageCount),
+          _shortcutItem(theme, "Orders", Icons.receipt_long, () => _openPurchaseHistory()),
           _shortcutItem(theme, "Favorites", Icons.favorite, () => _openFavorites()),
-          _shortcutItem(theme, "Reviews", Icons.star, () => _openReviews(), badgeCount: _unreadReviewCount),
+          _shortcutItem(theme, "Alerts", Icons.notifications, () => _openNotifications(), badgeCount: _unreadNotificationCount),
         ],
       ),
     );
@@ -671,9 +680,13 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
     Navigator.push(context, MaterialPageRoute(builder: (context) => FavoritesScreen(currentUser: widget.buyer)));
   }
 
-  void _openReviews() async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => ReviewNotificationsScreen(currentUser: _currentBuyer)));
-    _getUnreadReviewCount();
+  void _openPurchaseHistory() {
+    Navigator.push(context, MaterialPageRoute(builder: (context) => PurchaseHistoryScreen(currentUser: _currentBuyer)));
+  }
+
+  void _openNotifications() async {
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => NotificationsScreen(currentUser: _currentBuyer)));
+    _getUnreadNotificationCount();
   }
 
   Widget _buildSectionHeader(ThemeData theme, String title, {VoidCallback? onAction}) {
@@ -697,25 +710,37 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return WillPopScope(
-      onWillPop: () async {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
         await _handleLogoutRequest();
-        return false;
       },
       child: Scaffold(
+        extendBodyBehindAppBar: true,
         appBar: AppBar(
-          backgroundColor: theme.colorScheme.surface,
+          backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.7),
           elevation: 0,
           foregroundColor: theme.colorScheme.onSurface,
           iconTheme: IconThemeData(color: theme.colorScheme.primary),
-          title: Text("Kaawa Coffee", style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+          flexibleSpace: ClipRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: Container(color: Colors.transparent),
+            ),
+          ),
+          title: Image.asset(
+            'assets/icons/pngwing.png',
+            height: 32,
+            fit: BoxFit.contain,
+          ),
           actions: [
             IconButton(
-              onPressed: _openMessages,
+              onPressed: _openNotifications,
               icon: Stack(
                 children: [
                   const Icon(Icons.notifications_none),
-                  if (_unreadMessageCount > 0)
+                  if (_unreadNotificationCount > 0)
                     Positioned(right: 0, top: 0, child: Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle), constraints: const BoxConstraints(minWidth: 12, minHeight: 12))),
                 ],
               ),
@@ -737,37 +762,175 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
             ),
           ],
         ),
-        body: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          child: StreamBuilder<List<CoffeeStock>>(
-            stream: _coffeeStockStream,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting && _allCoffeeStock.isEmpty) {
-                return const Center(child: CompactLoader());
-              }
-              if (snapshot.hasData) {
-                _allCoffeeStock = snapshot.data!;
-                // Update filtered list without immediate setState if possible, 
-                // or ensure it only updates when data actually changes
-                final query = _searchController.text.toLowerCase();
-                _filteredCoffeeStock = _allCoffeeStock.where((stock) {
-                  return stock.coffeeType.toLowerCase().contains(query);
-                }).toList();
-              }
+        floatingActionButton: FloatingActionButton(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UserSelectionScreen(
+                  currentUser: _currentBuyer,
+                  targetType: kaawa.UserType.farmer,
+                ),
+              ),
+            );
+          },
+          backgroundColor: theme.colorScheme.primary,
+          child: const Icon(Icons.chat_bubble_outline),
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async {
+            setState(() {
+              _coffeeStockStream = _supabaseService.getAllCoffeeStockStream();
+            });
+            await _refreshCurrentBuyer();
+            await _loadCartFromPrefs();
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            child: StreamBuilder<List<CoffeeStock>>(
+              stream: _coffeeStockStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting && _allCoffeeStock.isEmpty) {
+                  return _buildShimmerLoading(theme);
+                }
+                if (snapshot.hasData) {
+                  _allCoffeeStock = snapshot.data!;
+                  final query = _searchController.text.toLowerCase();
+                  _filteredCoffeeStock = _allCoffeeStock.where((stock) {
+                    return stock.coffeeType.toLowerCase().contains(query);
+                  }).toList();
+                }
 
-              return ListView(
-                children: [
-                  _buildSearchForm(theme),
-                  _buildHomeShortcuts(theme),
-                  _buildSectionHeader(theme, "Featured Listings"),
-                  _buildHorizontalList(theme),
-                  _buildSectionHeader(theme, "All Coffee Stock"),
-                  _buildCoffeeGrid(theme),
-                ],
-              );
-            },
+                if (_allCoffeeStock.isEmpty && snapshot.connectionState != ConnectionState.waiting) {
+                  return _buildEmptyState(theme);
+                }
+
+                return ListView(
+                  padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + kToolbarHeight + 10),
+                  children: [
+                    _buildSearchForm(theme),
+                    _buildHomeShortcuts(theme),
+                    _buildSectionHeader(theme, "Featured Listings"),
+                    _buildHorizontalList(theme),
+                    _buildSectionHeader(theme, "All Coffee Stock"),
+                    _buildCoffeeGrid(theme),
+                  ],
+                );
+              },
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.eco_outlined, size: 80, color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+          const SizedBox(height: 16),
+          Text("No coffee stock available", style: theme.textTheme.titleLarge),
+          const SizedBox(height: 8),
+          Text("Check back later for fresh listings from farmers.", style: theme.textTheme.bodyMedium, textAlign: TextAlign.center),
+          const SizedBox(height: 24),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton(
+                onPressed: () => setState(() => _coffeeStockStream = _supabaseService.getAllCoffeeStockStream()),
+                child: const Text("Refresh"),
+              ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: _refreshLocation,
+                icon: const Icon(Icons.my_location),
+                label: const Text("Refresh Location"),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _refreshLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location services are disabled.')));
+        }
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are denied.')));
+          }
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location permissions are permanently denied.')));
+        }
+        return;
+      }
+
+      final position = await Geolocator.getCurrentPosition();
+      await _supabaseService.updateProfile(_currentBuyer.copyWith(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      ));
+      await _refreshCurrentBuyer();
+      await _refreshCurrentBuyer();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Location updated successfully.')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating location: $e')));
+      }
+    }
+  }
+
+  Widget _buildShimmerLoading(ThemeData theme) {
+    return Shimmer.fromColors(
+      baseColor: theme.colorScheme.surfaceVariant,
+      highlightColor: theme.colorScheme.surface,
+      child: ListView(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + kToolbarHeight + 10),
+        children: [
+          Container(height: 50, margin: const EdgeInsets.symmetric(vertical: 10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+          Container(height: 120, margin: const EdgeInsets.symmetric(vertical: 10), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+          const SizedBox(height: 20),
+          Container(height: 30, width: 150, color: Colors.white),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 220,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: 3,
+              itemBuilder: (_, __) => Container(width: 200, margin: const EdgeInsets.only(right: 15), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(height: 30, width: 150, color: Colors.white),
+          const SizedBox(height: 10),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, crossAxisSpacing: 10, mainAxisSpacing: 10, childAspectRatio: 0.75),
+            itemCount: 4,
+            itemBuilder: (_, __) => Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+          ),
+        ],
       ),
     );
   }
@@ -804,6 +967,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                         stock: stock,
                         farmer: farmer,
                         currentUser: widget.buyer,
+                        heroTag: 'stock_featured_${stock.id}',
                       ),
                     ),
                   );
@@ -814,7 +978,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: ListingCarousel(images: images, fit: BoxFit.cover),
+                      child: Hero(
+                        tag: 'stock_featured_${stock.id}',
+                        child: ListingCarousel(images: images, fit: BoxFit.cover),
+                      ),
                     ),
                     Positioned.fill(
                       child: Container(
@@ -823,8 +990,8 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              theme.colorScheme.primary.withOpacity(0.2),
-                              Colors.black.withOpacity(0.7),
+                              theme.colorScheme.primary.withValues(alpha: 0.2),
+                              Colors.black.withValues(alpha: 0.7),
                             ],
                           ),
                         ),
@@ -836,16 +1003,33 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.primary,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              "Featured",
-                              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
-                            ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  "Featured",
+                                  style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
+                                ),
+                              ),
+                              if (stock.quantity > 500)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.shade700,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    "Bulk",
+                                    style: theme.textTheme.labelSmall?.copyWith(color: Colors.white),
+                                  ),
+                                ),
+                            ],
                           ),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -864,10 +1048,10 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
                                 "UGX ${stock.pricePerKg}/kg",
                                 style: const TextStyle(color: Colors.white70),
                               ),
-                              if (stock.quantity <= 0)
+                              if (stock.isSold || stock.quantityRemaining <= 0)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 4),
-                                  child: _buildSoldBadge(theme),
+                                  child: _buildSoldBadge(theme, isSoldOut: stock.quantityRemaining <= 0),
                                 ),
                             ],
                           ),
@@ -899,7 +1083,7 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
         crossAxisCount: 2,
         crossAxisSpacing: 10,
         mainAxisSpacing: 10,
-        childAspectRatio: 0.75,
+        childAspectRatio: 0.7,
       ),
       itemCount: _filteredCoffeeStock.length,
       itemBuilder: (context, index) {
@@ -914,31 +1098,82 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
               if (!mounted) return;
               final result = await Navigator.push<Map<String, dynamic>>(
                 context,
-                MaterialPageRoute(builder: (context) => ProductDetailScreen(stock: stock, farmer: farmer, currentUser: widget.buyer)),
+                MaterialPageRoute(
+                  builder: (context) => ProductDetailScreen(
+                    stock: stock,
+                    farmer: farmer,
+                    currentUser: widget.buyer,
+                    heroTag: 'stock_grid_${stock.id}',
+                  ),
+                ),
               );
               if (result != null && result['action'] == 'add_to_cart' && farmer != null) {
                 _addToCart(stock, farmer, result['quantity'] as double);
               }
             },
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Stack(
               children: [
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                    child: ListingCarousel(images: images, fit: BoxFit.cover),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                        child: Hero(
+                          tag: 'stock_grid_${stock.id}',
+                          child: ListingCarousel(images: images, fit: BoxFit.cover),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(stock.coffeeType, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Text("UGX ${stock.pricePerKg}/kg", style: theme.textTheme.bodySmall, maxLines: 1),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              if (!stock.isSold && stock.quantityRemaining > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(color: theme.colorScheme.secondaryContainer, borderRadius: BorderRadius.circular(4)),
+                                  child: Text("${stock.quantityRemaining} Kg Available", style: theme.textTheme.labelSmall?.copyWith(fontSize: 9)),
+                                )
+                              else
+                                _buildSoldBadge(theme, isSoldOut: stock.quantityRemaining <= 0),
+                              const SizedBox(width: 4),
+                              if (stock.pricePerKg < 5000 && !stock.isSold && stock.quantityRemaining > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                  decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(4)),
+                                  child: Text("Best Price", style: theme.textTheme.labelSmall?.copyWith(fontSize: 9, color: Colors.green.shade800)),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(stock.coffeeType, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text("UGX ${stock.pricePerKg}/kg", style: theme.textTheme.bodySmall, maxLines: 1),
-                    ],
+                if (!stock.isSold && stock.quantityRemaining > 0)
+                  Positioned(
+                    right: 4,
+                    bottom: 40,
+                    child: FloatingActionButton.small(
+                      heroTag: 'quick_add_${stock.id}',
+                      onPressed: () async {
+                        final farmer = await _supabaseService.getProfile(stock.farmerId);
+                        if (farmer != null) {
+                          _addToCart(stock, farmer, 1.0);
+                        }
+                      },
+                      child: const Icon(Icons.add),
+                      backgroundColor: theme.colorScheme.primary,
+                      foregroundColor: theme.colorScheme.onPrimary,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

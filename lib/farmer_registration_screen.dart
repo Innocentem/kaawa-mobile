@@ -95,7 +95,12 @@ class _FarmerRegistrationScreenState extends State<FarmerRegistrationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Farmer Registration'),
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),

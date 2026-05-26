@@ -24,30 +24,52 @@ class _AdminConversationsListScreenState extends State<AdminConversationsListScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Conversations')),
-      body: FutureBuilder<List<Conversation>>(
-        future: _convsFuture,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
-          final convs = snap.data ?? [];
-          if (convs.isEmpty) return const Center(child: Text('No conversations'));
-          return ListView.separated(
-            itemCount: convs.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final c = convs[i];
-              return ListTile(
-                title: Text(c.otherUser.fullName),
-                subtitle: Text(c.lastMessage.text),
-                trailing: Text(c.lastMessage.timestamp.toLocal().toString().split('.').first),
-                onTap: () {
-                  final convScreen = acs.AdminConversationScreen(userId: widget.userId, otherUserId: c.otherUser.id!);
-                  Navigator.push(context, MaterialPageRoute(builder: (ctx) => convScreen));
-                },
-              );
-            },
-          );
-        },
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'User Conversations',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: FutureBuilder<List<Conversation>>(
+              future: _convsFuture,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
+                final convs = snap.data ?? [];
+                if (convs.isEmpty) return const Center(child: Text('No conversations'));
+                return ListView.separated(
+                  itemCount: convs.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final c = convs[i];
+                    return ListTile(
+                      title: Text(c.otherUser.fullName),
+                      subtitle: Text(c.lastMessage.text),
+                      trailing: Text(c.lastMessage.timestamp.toLocal().toString().split('.').first),
+                      onTap: () {
+                        final convScreen = acs.AdminConversationScreen(userId: widget.userId, otherUserId: c.otherUser.id!);
+                        Navigator.push(context, MaterialPageRoute(builder: (ctx) => convScreen));
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

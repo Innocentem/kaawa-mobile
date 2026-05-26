@@ -76,7 +76,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Admin Dashboard'),
+          title: Image.asset(
+            'assets/icons/pngwing.png',
+            height: 32,
+            fit: BoxFit.contain,
+          ),
+          centerTitle: true,
           actions: [
             IconButton(
               icon: const Icon(Icons.logout),

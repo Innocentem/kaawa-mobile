@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
@@ -14,15 +13,19 @@ class AppAvatar extends StatelessWidget {
   final double? size;
   final BoxFit fit;
   final String fallbackAsset;
+  final String? heroTag;
+  final VoidCallback? onTap;
 
   const AppAvatar({
-    Key? key,
+    super.key,
     this.filePath,
     this.imageUrl,
     this.size,
     this.fit = BoxFit.cover,
     this.fallbackAsset = 'assets/images/avatar.jpg',
-  }) : super(key: key);
+    this.heroTag,
+    this.onTap,
+  });
 
   Widget _buildNetworkImage(String url, ThemeData theme) {
     return CachedNetworkImage(
@@ -32,8 +35,8 @@ class AppAvatar extends StatelessWidget {
       fit: fit,
       fadeInDuration: const Duration(milliseconds: 250),
       placeholder: (context, url) {
-        final base = theme.colorScheme.surface.withOpacity(0.6);
-        final highlight = theme.colorScheme.surface.withOpacity(0.85);
+        final base = theme.colorScheme.surface.withValues(alpha: 0.6);
+        final highlight = theme.colorScheme.surface.withValues(alpha: 0.85);
         return Shimmer.fromColors(
           baseColor: base,
           highlightColor: highlight,
@@ -42,7 +45,7 @@ class AppAvatar extends StatelessWidget {
         );
       },
       errorWidget: (context, url, error) {
-        print('AppAvatar: Failed to load image from URL: $url. Error: $error');
+        debugPrint('AppAvatar: Failed to load image from URL: $url. Error: $error');
         return Image.asset(fallbackAsset, width: size, height: size, fit: fit);
       },
     );
@@ -81,7 +84,6 @@ class AppAvatar extends StatelessWidget {
         if (imageUrl!.startsWith('http') || imageUrl!.startsWith('https')) {
           content = _buildNetworkImage(imageUrl!, theme);
         } else {
-          // If it's not a URL and not a file path we can handle, it might be a local path that doesn't exist anymore
           final cleanPath = imageUrl!.startsWith('file://')
               ? imageUrl!.replaceFirst('file://', '')
               : imageUrl!;
@@ -101,13 +103,27 @@ class AppAvatar extends StatelessWidget {
       content = Image.asset(fallbackAsset, width: size, height: size, fit: fit);
     }
 
-    // If a size was provided wrap in a fixed box; otherwise let it expand to parent's constraints.
-    final avatar = size != null
+    Widget avatar = size != null
         ? SizedBox(width: size, height: size, child: ClipOval(child: content))
         : ClipOval(child: SizedBox.expand(child: content));
+
+    if (heroTag != null) {
+      avatar = Hero(
+        tag: heroTag!,
+        child: Material(
+          type: MaterialType.transparency,
+          child: avatar,
+        ),
+      );
+    }
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: avatar,
+      );
+    }
 
     return avatar;
   }
 }
-
-// shimmer provided by the 'shimmer' package now

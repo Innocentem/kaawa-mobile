@@ -1,9 +1,13 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
-import 'package:kaawa/profile_screen.dart';
+import 'package:kaawa/data/review_data.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/widgets/shimmer_skeleton.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
-import 'package:kaawa/widgets/compact_loader.dart';
+import 'package:kaawa/profile_screen.dart';
+import 'package:kaawa/chat_screen.dart';
 
 class ReviewNotificationsScreen extends StatefulWidget {
   final kaawa.User currentUser;
@@ -19,118 +23,199 @@ class _ReviewNotificationsScreenState extends State<ReviewNotificationsScreen> {
   @override
   void initState() {
     super.initState();
-    _notificationsFuture = _loadNotifications();
+    _refresh();
   }
 
-  Future<List<Map<String, dynamic>>> _loadNotifications() async {
-    final rows = await SupabaseService.instance.getReviewNotifications(widget.currentUser.id!);
-    final hasUnread = rows.any((row) => (row['notification'] as Map<String, dynamic>)['isRead'] == false);
-    if (hasUnread) {
-      await SupabaseService.instance.markAllReviewNotificationsRead(widget.currentUser.id!);
-    }
-    return rows;
-  }
-
-  Widget _buildStars(BuildContext context, double rating) {
-    final filled = rating.round().clamp(0, 5);
-    return Row(
-      children: List.generate(5, (i) {
-        return Icon(
-          i < filled ? Icons.star : Icons.star_border,
-          size: 16,
-          color: Colors.amber.shade700,
-        );
-      }),
-    );
+  void _refresh() {
+    setState(() {
+      _notificationsFuture = SupabaseService.instance.getReviewNotifications(widget.currentUser.id!);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Review notifications')),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _notificationsFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const Center(child: SizedBox(height: 160, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading notifications'))));
-          }
-          if (snapshot.hasError) {
-            return const Center(child: Text('Error loading review notifications.'));
-          }
-          final entries = snapshot.data ?? [];
-          if (entries.isEmpty) {
-            return const Center(child: Text('No reviews yet.'));
-          }
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: AppBar(
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.8),
+              elevation: 0,
+              foregroundColor: theme.colorScheme.onPrimary,
+              title: Image.asset(
+                'assets/icons/pngwing.png',
+                height: 32,
+                fit: BoxFit.contain,
+              ),
+              centerTitle: true,
+            ),
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          SizedBox(height: MediaQuery.of(context).padding.top + kToolbarHeight + 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Review notifications',
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _notificationsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: 5,
+                    itemBuilder: (_, __) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ShimmerSkeleton.rect(height: 100, borderRadius: BorderRadius.circular(12)),
+                    ),
+                  );
+                }
+                if (snapshot.hasError) {
+                  return const Center(child: Text('Error loading review notifications.'));
+                }
+                final entries = snapshot.data ?? [];
+                if (entries.isEmpty) {
+                  return const Center(child: Text('No reviews yet.'));
+                }
 
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: entries.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              final notification = entry['notification'] as Map<String, dynamic>;
-              final review = entry['review'] as Map<String, dynamic>;
-              final reviewer = entry['reviewer'] as kaawa.User?;
-              final ratingVal = review['rating'];
-              final rating = ratingVal is num ? ratingVal.toDouble() : double.tryParse(ratingVal?.toString() ?? '') ?? 0.0;
-              final createdAt = notification['createdAt']?.toString();
+                return RefreshIndicator(
+                  onRefresh: () async => _refresh(),
+                  child: ListView.separated(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: entries.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final notification = entry['notification'] as Map<String, dynamic>;
+                      final review = Review.fromMap(entry['review'] as Map<String, dynamic>);
+                      final reviewer = entry['reviewer'] as kaawa.User?;
+                      final coffeeStock = entry['coffeeStock'] as CoffeeStock?;
+                      final rating = review.rating;
 
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      InkWell(
-                        borderRadius: BorderRadius.circular(24),
-                        onTap: reviewer == null
-                            ? null
-                            : () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ProfileScreen(
-                                      currentUser: widget.currentUser,
-                                      profileOwner: reviewer,
+                      return Card(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppAvatar(
+                                filePath: reviewer?.profilePicturePath,
+                                size: 40,
+                                onTap: reviewer == null
+                                    ? null
+                                    : () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (c) => ProfileScreen(currentUser: widget.currentUser, profileOwner: reviewer),
+                                          ),
+                                        );
+                                      },
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          reviewer?.fullName ?? 'Unknown',
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.star, color: Colors.amber, size: 16),
+                                            Text(
+                                              rating.toStringAsFixed(1),
+                                              style: theme.textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                );
-                              },
-                        child: AppAvatar(
-                          filePath: reviewer?.profilePicturePath,
-                          imageUrl: reviewer?.profilePicturePath,
-                          size: 40,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              reviewer?.fullName ?? 'Unknown reviewer',
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            _buildStars(context, rating),
-                            const SizedBox(height: 6),
-                            Text(review['reviewText']?.toString() ?? ''),
-                            if (createdAt != null) ...[
-                              const SizedBox(height: 6),
-                              Text(createdAt.replaceFirst('T', ' ').split('.').first, style: Theme.of(context).textTheme.bodySmall),
+                                    if (coffeeStock != null) ...[
+                                      const SizedBox(height: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.surfaceContainerHighest,
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          'Listing: ${coffeeStock.coffeeType}',
+                                          style: theme.textTheme.labelSmall?.copyWith(
+                                            color: theme.colorScheme.onSurfaceVariant,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      review.comment.isEmpty ? 'No comment provided.' : review.comment,
+                                      style: theme.textTheme.bodyMedium,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        TextButton.icon(
+                                          onPressed: reviewer == null
+                                              ? null
+                                              : () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (c) => ChatScreen(
+                                                        currentUser: widget.currentUser,
+                                                        otherUser: reviewer,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                                          label: const Text('Chat'),
+                                        ),
+                                        if (notification['isRead'] == false) ...[
+                                          const SizedBox(width: 8),
+                                          TextButton(
+                                            onPressed: () async {
+                                              await SupabaseService.instance.markReviewNotificationRead(notification['id']);
+                                              _refresh();
+                                            },
+                                            child: const Text('Mark as read'),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-

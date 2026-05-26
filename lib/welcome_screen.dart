@@ -33,6 +33,9 @@ class _InitialScreenState extends State<InitialScreen> {
   }
 
   Future<void> _checkLoginStatus() async {
+    // Artificial delay for splash feel
+    await Future.delayed(const Duration(seconds: 2));
+
     if (_authService.isLoggedIn) {
       final userId = _authService.userId;
       if (userId != null) {
@@ -45,6 +48,7 @@ class _InitialScreenState extends State<InitialScreen> {
           // If suspended, don't auto-login
           if (user.isSuspended) {
             await _authService.logout();
+            _goToWelcome();
             return;
           }
 
@@ -77,14 +81,51 @@ class _InitialScreenState extends State<InitialScreen> {
               (route) => false,
             );
           }
+          return;
         }
       }
     }
+    _goToWelcome();
+  }
+
+  void _goToWelcome() {
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => const WelcomeScreen(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 800),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return const WelcomeScreen();
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Hero(
+              tag: 'app_logo',
+              child: Image.asset(
+                'assets/icons/pngwing.png',
+                width: 120,
+                height: 120,
+                fit: BoxFit.contain,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -259,15 +300,15 @@ class WelcomeScreen extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 24.0),
                     child: Column(
                       children: [
-                        Text(
-                          'Welcome to Kaawa',
-                          style: theme.textTheme.headlineSmall?.copyWith(
-                            color: theme.brightness == Brightness.dark ? theme.iconTheme.color : theme.colorScheme.primary,
-                            fontWeight: FontWeight.w600,
+                        Hero(
+                          tag: 'app_logo',
+                          child: Image.asset(
+                            'assets/icons/pngwing.png',
+                            height: 60,
+                            fit: BoxFit.contain,
                           ),
-                          textAlign: TextAlign.center,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 16),
                         Text(
                           'Connecting coffee farmers and buyers',
                           style: theme.textTheme.bodyMedium,

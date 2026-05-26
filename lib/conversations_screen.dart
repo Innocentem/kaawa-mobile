@@ -28,7 +28,12 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
       ),
       body: StreamBuilder<List<Conversation>>(
         stream: _conversationsStream,
@@ -39,11 +44,22 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             return Center(child: Text('Error loading conversations: ${snapshot.error}'));
           } else {
             final conversations = snapshot.data ?? [];
-            return conversations.isEmpty
-                ? const Center(child: Text('You have no conversations yet.'))
-                : ListView.builder(
-                    itemCount: conversations.length,
-                    itemBuilder: (context, index) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Messages',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(
+                  child: conversations.isEmpty
+                      ? const Center(child: Text('You have no conversations yet.'))
+                      : ListView.builder(
+                          itemCount: conversations.length,
+                          itemBuilder: (context, index) {
                       final conversation = conversations[index];
                       final otherUser = conversation.otherUser;
                       final lastMessage = conversation.lastMessage;
@@ -98,7 +114,10 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                         },
                       );
                     },
-                  );
+                  ),
+                ),
+              ],
+            );
           }
         },
       ),

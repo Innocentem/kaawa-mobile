@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/manage_stock_screen.dart';
+import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/write_review_screen.dart';
 import 'package:kaawa/view_reviews_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
@@ -37,6 +39,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isSaving = false;
   bool _hasReviewed = false;
   bool _reviewStatusLoaded = false;
+  bool _isFavorite = false;
+  bool _favoriteStatusLoaded = false;
 
   late kaawa.User _profileOwner;
   late TextEditingController _fullNameController;
@@ -55,6 +59,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profileOwner = widget.profileOwner;
     _initializeControllers(_profileOwner);
     _loadReviewStatus();
+    _loadFavoriteStatus();
+  }
+
+  Future<void> _loadFavoriteStatus() async {
+    if (_isOwnProfile) return;
+    try {
+      final favorites = await SupabaseService.instance.getFavorites(widget.currentUser.id!);
+      if (mounted) {
+        setState(() {
+          _isFavorite = favorites.any((u) => u.id == _profileOwner.id);
+          _favoriteStatusLoaded = true;
+        });
+      }
+    } catch (e) {
+      print('Error loading favorite status: $e');
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    try {
+      if (_isFavorite) {
+        await SupabaseService.instance.removeFavorite(widget.currentUser.id!, _profileOwner.id!);
+      } else {
+        await SupabaseService.instance.addFavorite(widget.currentUser.id!, _profileOwner.id!);
+      }
+      if (mounted) {
+        setState(() {
+          _isFavorite = !_isFavorite;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_isFavorite ? 'Added to favorites' : 'Removed from favorites')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating favorite: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _loadReviewStatus() async {
@@ -325,23 +369,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        elevation: 0,
-        automaticallyImplyLeading: true,
-        actions: [
-          if (_isOwnProfile)
-            IconButton(
-              icon: Icon(_isEditing ? Icons.cancel : Icons.settings),
-              onPressed: _toggleEditing,
+      extendBodyBehindAppBar: true,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight),
+        child: ClipRRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: AppBar(
+              backgroundColor: theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+              elevation: 0,
+              centerTitle: true,
+              title: Image.asset(
+                'assets/icons/pngwing.png',
+                height: 32,
+                fit: BoxFit.contain,
+              ),
+              automaticallyImplyLeading: true,
+              actions: [
+                if (!_isOwnProfile && _favoriteStatusLoaded)
+                  IconButton(
+                    icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: _isFavorite ? Colors.red : null),
+                    onPressed: _toggleFavorite,
+                  ),
+                if (_isOwnProfile)
+                  IconButton(
+                    icon: Icon(_isEditing ? Icons.cancel : Icons.settings),
+                    onPressed: _toggleEditing,
+                  ),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+        padding: EdgeInsets.fromLTRB(20.0, MediaQuery.of(context).padding.top + kToolbarHeight + 8.0, 20.0, 28.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            Text(
+              'Profile',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 24),
             // Avatar and name
             Center(
               child: Column(
@@ -349,19 +421,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Hero(
-                        tag: _profileOwner.id != null
-                            ? 'avatar-${_profileOwner.id}'
-                            : UniqueKey(),
-                        child: Material(
-                          type: MaterialType.transparency,
-                          child: AppAvatar(
-                            key: ValueKey(_profilePicturePath),
-                            filePath: _profilePicturePath,
-                            imageUrl: _profilePicturePath,
-                            size: 72,
-                          ),
-                        ),
+                      AppAvatar(
+                        key: ValueKey(_profilePicturePath),
+                        filePath: _profilePicturePath,
+                        imageUrl: _profilePicturePath,
+                        size: 72,
+                        heroTag: 'profile_avatar_${_profileOwner.id}',
                       ),
                       if (_isEditing)
                         Positioned(
@@ -527,51 +592,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   if (!_isOwnProfile &&
-                      _profileOwner.userType != kaawa.UserType.admin)
-                    ElevatedButton(
-                      onPressed: !_reviewStatusLoaded || _hasReviewed
-                          ? null
-                          : () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => WriteReviewScreen(
-                                    reviewer: widget.currentUser,
-                                    reviewedUser: _profileOwner,
-                                  ),
-                                ),
-                              );
-                              await _loadReviewStatus();
-                            },
-                      child: Text(_hasReviewed
-                          ? 'Review already submitted'
-                          : 'Write a Review'),
+                      _profileOwner.userType != kaawa.UserType.admin) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.message),
+                        label: const Text('Message'),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(
+                                currentUser: widget.currentUser,
+                                otherUser: _profileOwner,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
-                  const SizedBox(height: 12),
-                  if (_profileOwner.userType != kaawa.UserType.admin)
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ViewReviewsScreen(
-                              reviewedUser: _profileOwner,
-                              currentUser: widget.currentUser,
-                              onOpenProfile: (reviewer) {
-                                Navigator.push(
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.rate_review),
+                        onPressed: !_reviewStatusLoaded || _hasReviewed
+                            ? null
+                            : () async {
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => ProfileScreen(
-                                        currentUser: widget.currentUser,
-                                        profileOwner: reviewer),
+                                    builder: (context) => WriteReviewScreen(
+                                      reviewer: widget.currentUser,
+                                      reviewedUser: _profileOwner,
+                                    ),
                                   ),
                                 );
+                                await _loadReviewStatus();
                               },
+                        label: Text(_hasReviewed
+                            ? 'Review already submitted'
+                            : 'Write a Review'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_profileOwner.userType != kaawa.UserType.admin)
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.visibility),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ViewReviewsScreen(
+                                reviewedUser: _profileOwner,
+                                currentUser: widget.currentUser,
+                                onOpenProfile: (reviewer) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfileScreen(
+                                          currentUser: widget.currentUser,
+                                          profileOwner: reviewer),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                      child: const Text('View Reviews'),
+                          );
+                        },
+                        label: const Text('View Reviews'),
+                      ),
                     ),
                   if (_isOwnProfile) ...[
                     const Divider(height: 40),

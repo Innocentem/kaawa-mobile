@@ -23,29 +23,51 @@ class _AdminUserListingsScreenState extends State<AdminUserListingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('User Listings')),
-      body: FutureBuilder<List<CoffeeStock>>(
-        future: _listingsFuture,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
-          final items = snap.data ?? [];
-          if (items.isEmpty) return const Center(child: Text('No listings'));
-          return ListView.separated(
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (context, i) {
-              final s = items[i];
-              return ListTile(
-                title: Text(s.coffeeType),
-                subtitle: Text('Qty: ${s.quantity}kg • UGX ${s.pricePerKg}/kg'),
-                trailing: FutureBuilder<int>(
-                  future: SupabaseService.instance.getInterestCountForStock(s.id!),
-                  builder: (c, snap2) => Text('${snap2.data ?? 0} interests'),
-                ),
-              );
-            },
-          );
-        },
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'User Listings',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: FutureBuilder<List<CoffeeStock>>(
+              future: _listingsFuture,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
+                final items = snap.data ?? [];
+                if (items.isEmpty) return const Center(child: Text('No listings'));
+                return ListView.separated(
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, i) {
+                    final s = items[i];
+                    return ListTile(
+                      title: Text(s.coffeeType),
+                      subtitle: Text('Qty: ${s.quantity}kg • UGX ${s.pricePerKg}/kg'),
+                      trailing: FutureBuilder<int>(
+                        future: SupabaseService.instance.getInterestCountForStock(s.id!),
+                        builder: (c, snap2) => Text('${snap2.data ?? 0} interests'),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

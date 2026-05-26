@@ -36,8 +36,8 @@ class ListingImage extends StatelessWidget {
             fadeInDuration: const Duration(milliseconds: 250),
             placeholder: (context, url) {
               final theme = Theme.of(context);
-              final base = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.6 : 0.25);
-              final highlight = theme.colorScheme.surface.withOpacity(theme.brightness == Brightness.dark ? 0.85 : 0.6);
+              final base = theme.colorScheme.surface.withValues(alpha: theme.brightness == Brightness.dark ? 0.6 : 0.25);
+              final highlight = theme.colorScheme.surface.withValues(alpha: theme.brightness == Brightness.dark ? 0.85 : 0.6);
               return Shimmer.fromColors(
                 baseColor: base,
                 highlightColor: highlight,

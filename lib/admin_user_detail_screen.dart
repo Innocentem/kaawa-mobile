@@ -100,12 +100,35 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
     final u = _user;
     final isSuspended = u.isSuspended;
     return Scaffold(
-      appBar: AppBar(title: Text(u.fullName)),
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  'User Details',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            Text(
+              u.fullName,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
             Text('Phone: ${u.phoneNumber}'),
             Text('District: ${u.district}'),
             Text('Type: ${u.userType.name}'),

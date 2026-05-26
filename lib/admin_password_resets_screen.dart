@@ -91,7 +91,14 @@ class _AdminPasswordResetsScreenState extends State<AdminPasswordResetsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pending Password Resets')),
+      appBar: AppBar(
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
+      ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _future,
         builder: (context, snap) {
@@ -102,22 +109,38 @@ class _AdminPasswordResetsScreenState extends State<AdminPasswordResetsScreen> {
           if (rows.isEmpty) {
             return const Center(child: Text('No pending password reset requests'));
           }
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView.builder(
-              itemCount: rows.length,
-              itemBuilder: (context, i) {
-                final r = rows[i];
-                return ListTile(
-                  title: Text(r['phone_number'] ?? ''),
-                  subtitle: Text('Requested: ${r['created_at'] ?? ''}'),
-                  trailing: ElevatedButton(
-                    onPressed: () => _handleReset(r['id'].toString(), r['phone_number'] as String),
-                    child: const Text('Reset'),
+          final theme = Theme.of(context);
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Text(
+                  'Password Resets',
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                );
-              },
-            ),
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView.builder(
+                    itemCount: rows.length,
+                    itemBuilder: (context, i) {
+                      final r = rows[i];
+                      return ListTile(
+                        title: Text(r['phone_number'] ?? ''),
+                        subtitle: Text('Requested: ${r['created_at'] ?? ''}'),
+                        trailing: ElevatedButton(
+                          onPressed: () => _handleReset(r['id'].toString(), r['phone_number'] as String),
+                          child: const Text('Reset'),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),

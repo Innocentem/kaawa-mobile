@@ -1,13 +1,22 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:kaawa/data/review_data.dart';
+import 'package:kaawa/data/coffee_stock_data.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
 import 'package:kaawa/data/supabase_service.dart';
+import 'package:kaawa/widgets/app_avatar.dart';
 
 class WriteReviewScreen extends StatefulWidget {
   final kaawa.User reviewer;
-  final kaawa.User reviewedUser;
+  final kaawa.User? reviewedUser;
+  final CoffeeStock? coffeeStock;
 
-  const WriteReviewScreen({super.key, required this.reviewer, required this.reviewedUser});
+  const WriteReviewScreen({
+    super.key,
+    required this.reviewer,
+    this.reviewedUser,
+    this.coffeeStock,
+  }) : assert(reviewedUser != null || coffeeStock != null);
 
   @override
   State<WriteReviewScreen> createState() => _WriteReviewScreenState();
@@ -16,8 +25,9 @@ class WriteReviewScreen extends StatefulWidget {
 class _WriteReviewScreenState extends State<WriteReviewScreen> {
   final _formKey = GlobalKey<FormState>();
   final _reviewController = TextEditingController();
-  double _rating = 3.0;
+  double _rating = 0.0;
   bool _alreadyReviewed = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -26,22 +36,31 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
   }
 
   Future<void> _loadReviewStatus() async {
-    final exists = await SupabaseService.instance.hasReviewByUser(widget.reviewer.id!, widget.reviewedUser.id!);
-    if (!mounted) return;
-    setState(() => _alreadyReviewed = exists);
+    if (widget.reviewedUser != null) {
+      final exists = await SupabaseService.instance.hasReviewByUser(widget.reviewer.id!, widget.reviewedUser!.id!);
+      if (mounted) setState(() => _alreadyReviewed = exists);
+    }
   }
 
   Future<void> _submitReview() async {
+    if (_rating == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a rating.')),
+      );
+      return;
+    }
     if (_alreadyReviewed) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You already reviewed this user.')),
+        const SnackBar(content: Text('You already reviewed this.')),
       );
       return;
     }
     if (_formKey.currentState!.validate()) {
+      setState(() => _isSubmitting = true);
       final newReview = Review(
         reviewerId: widget.reviewer.id!,
-        reviewedUserId: widget.reviewedUser.id!,
+        reviewedUserId: widget.reviewedUser?.id,
+        coffeeStockId: widget.coffeeStock?.id,
         rating: _rating,
         comment: _reviewController.text,
       );
@@ -50,14 +69,16 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
         await SupabaseService.instance.insertReview(newReview);
       } catch (e) {
         if (!mounted) return;
-        // In Supabase, the unique constraint (reviewer_id, reviewed_user_id) will throw an error
-        setState(() => _alreadyReviewed = true);
+        setState(() {
+          _isSubmitting = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('You already reviewed this user.')),
+          SnackBar(content: Text('Error submitting review: $e')),
         );
         return;
       }
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Review submitted successfully!')),
       );
@@ -68,58 +89,143 @@ class _WriteReviewScreenState extends State<WriteReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('Write a review for ${widget.reviewedUser.fullName}'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(color: theme.colorScheme.surface.withValues(alpha: 0.5)),
+          ),
+        ),
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: <Widget>[
-              const Text('Rating', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              if (_alreadyReviewed) ...[
-                const SizedBox(height: 6),
-                Text('You already reviewed this user.', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.error)),
-              ],
-              const SizedBox(height: 8),
-              Row(
-                children: List.generate(5, (index) {
-                  final value = index + 1;
-                  final isSelected = _rating >= value;
-                  return IconButton(
-                    tooltip: '$value star${value == 1 ? '' : 's'}',
-                    onPressed: () => setState(() => _rating = value.toDouble()),
-                    icon: Icon(
-                      isSelected ? Icons.star : Icons.star_border,
-                      color: isSelected ? Colors.amber.shade700 : Theme.of(context).disabledColor,
-                    ),
-                  );
-                }),
-              ),
-              Text('$_rating / 5', style: Theme.of(context).textTheme.bodySmall),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _reviewController,
-                decoration: const InputDecoration(
-                  labelText: 'Review',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 5,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your review';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _alreadyReviewed ? null : _submitReview,
-                child: const Text('Submit Review'),
-              ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.colorScheme.primary.withValues(alpha: 0.05),
+              theme.colorScheme.surface,
             ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    'Write a Review',
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  if (widget.reviewedUser != null) ...[
+                    AppAvatar(
+                      filePath: widget.reviewedUser!.profilePicturePath,
+                      imageUrl: widget.reviewedUser!.profilePicturePath,
+                      size: 100,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.reviewedUser!.fullName,
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      widget.reviewedUser!.userType == kaawa.UserType.farmer ? 'Farmer' : 'Buyer',
+                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.hintColor),
+                    ),
+                  ] else if (widget.coffeeStock != null) ...[
+                     // Display coffee stock info if reviewedUser is null
+                    const Icon(Icons.inventory, size: 80),
+                    const SizedBox(height: 16),
+                    Text(
+                      widget.coffeeStock!.coffeeType,
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    const Text('Product Review', style: TextStyle(fontSize: 16)),
+                  ],
+                  const SizedBox(height: 32),
+                  const Text('How was your experience?', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (index) {
+                      final value = index + 1;
+                      final isSelected = _rating >= value;
+                      return IconButton(
+                        iconSize: 40,
+                        onPressed: _alreadyReviewed ? null : () => setState(() => _rating = value.toDouble()),
+                        icon: Icon(
+                          isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
+                          color: isSelected ? Colors.amber : theme.disabledColor,
+                        ),
+                      );
+                    }),
+                  ),
+                  if (_alreadyReviewed) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      'You already reviewed this user.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  TextFormField(
+                    controller: _reviewController,
+                    readOnly: _alreadyReviewed,
+                    decoration: InputDecoration(
+                      hintText: 'Share your thoughts about this user...',
+                      labelText: 'Review comment',
+                      alignLabelWithHint: true,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      filled: true,
+                      fillColor: theme.colorScheme.surface,
+                    ),
+                    maxLines: 5,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your review';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 40),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: (_alreadyReviewed || _isSubmitting) ? null : _submitReview,
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: _isSubmitting
+                          ? const CircularProgressIndicator.adaptive()
+                          : const Text('Submit Review', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

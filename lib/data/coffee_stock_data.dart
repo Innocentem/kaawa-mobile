@@ -3,6 +3,7 @@ class CoffeeStock {
   final String farmerId;
   final String coffeeType;
   final double quantity;
+  final double quantityRemaining;
   final double pricePerKg;
   final String? coffeePicturePath;
   final String description;
@@ -13,11 +14,12 @@ class CoffeeStock {
     required this.farmerId,
     required this.coffeeType,
     required this.quantity,
+    double? quantityRemaining,
     required this.pricePerKg,
     this.coffeePicturePath,
     this.description = '',
     this.isSold = false,
-  });
+  }) : quantityRemaining = quantityRemaining ?? quantity;
 
   Map<String, dynamic> toMap() {
     return {
@@ -25,6 +27,7 @@ class CoffeeStock {
       'farmer_id': farmerId,
       'coffee_type': coffeeType,
       'quantity': quantity,
+      'quantity_remaining': quantityRemaining,
       'price_per_kg': pricePerKg,
       'coffee_picture_url': coffeePicturePath,
       'description': description,
@@ -37,8 +40,11 @@ class CoffeeStock {
       id: map['id']?.toString(),
       farmerId: map['farmer_id'] ?? map['farmerId']?.toString() ?? '',
       coffeeType: map['coffee_type'] ?? map['coffeeType'] ?? '',
-        quantity: map['quantity'] is num ? (map['quantity'] as num).toDouble() : 0.0,
-        pricePerKg: map['price_per_kg'] is num
+      quantity: map['quantity'] is num ? (map['quantity'] as num).toDouble() : 0.0,
+      quantityRemaining: map['quantity_remaining'] is num 
+          ? (map['quantity_remaining'] as num).toDouble() 
+          : (map['quantity'] is num ? (map['quantity'] as num).toDouble() : 0.0),
+      pricePerKg: map['price_per_kg'] is num
           ? (map['price_per_kg'] as num).toDouble()
           : (map['pricePerKg'] is num ? (map['pricePerKg'] as num).toDouble() : 0.0),
       coffeePicturePath: map['coffee_picture_url'] ?? map['coffeePicturePath'],

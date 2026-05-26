@@ -1,16 +1,17 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/coffee_stock_data.dart';
+import 'package:kaawa/data/supabase_service.dart';
 import 'package:kaawa/data/user_data.dart' as kaawa;
-import 'package:kaawa/chat_screen.dart';
 import 'package:kaawa/widgets/app_avatar.dart';
-import 'package:kaawa/widgets/compact_loader.dart';
+import 'package:kaawa/chat_screen.dart';
+import 'package:kaawa/view_reviews_screen.dart';
+import 'package:kaawa/profile_screen.dart';
 
 class InterestedBuyersScreen extends StatefulWidget {
-  final kaawa.User farmer;
   final CoffeeStock stock;
-
-  const InterestedBuyersScreen({super.key, required this.farmer, required this.stock});
+  final kaawa.User currentUser;
+  const InterestedBuyersScreen({super.key, required this.stock, required this.currentUser});
 
   @override
   State<InterestedBuyersScreen> createState() => _InterestedBuyersScreenState();
@@ -22,47 +23,184 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
   @override
   void initState() {
     super.initState();
-    // mark interests as seen for this stock (so farmer notification/counts will clear)
-    _buyersFuture = SupabaseService.instance.markInterestsAsSeenForStock(widget.stock.id!).then((_) {
-      // after marking as seen, return the buyers list
-      return SupabaseService.instance.getInterestedBuyersForStock(widget.stock.id!);
+    _refreshBuyers();
+  }
+
+  void _refreshBuyers() {
+    setState(() {
+      _buyersFuture = SupabaseService.instance.getInterestedBuyersForStock(widget.stock.id!);
     });
+    SupabaseService.instance.markInterestsAsSeen(widget.stock.id!).then((_) {
+      // Refreshing counts elsewhere will be handled by streams
+    });
+  }
+
+  Widget _buildShimmerList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(12),
+      itemCount: 5,
+      itemBuilder: (context, index) => Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Container(height: 80, color: Colors.grey[200]),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Interested Buyers')),
-      body: FutureBuilder<List<kaawa.User>>(
-        future: _buyersFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: SizedBox(height: 160, child: Center(child: CompactLoader(size: 28, strokeWidth: 3.0, semanticsLabel: 'Loading buyers'))));
-          if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-          final buyers = snapshot.data ?? [];
-          if (buyers.isEmpty) return const Center(child: Text('No interested buyers yet.'));
-          return ListView.builder(
-            itemCount: buyers.length,
-            itemBuilder: (context, index) {
-              final b = buyers[index];
-              return ListTile(
-                leading: Hero(tag: b.id != null ? 'avatar-${b.id}' : UniqueKey(), child: Material(type: MaterialType.transparency, child: AppAvatar(filePath: b.profilePicturePath, imageUrl: b.profilePicturePath, size: 44))),
-                title: Text(b.fullName),
-                subtitle: Text(b.district),
-                trailing: IconButton(
-                  icon: const Icon(Icons.message),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ChatScreen(currentUser: widget.farmer, otherUser: b, coffeeStock: widget.stock),
-                      ),
+    final theme = Theme.of(context);
+    return PopScope(
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: AppBar(
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.7),
+                elevation: 0,
+                foregroundColor: theme.colorScheme.onPrimary,
+                title: Image.asset(
+                  'assets/icons/pngwing.png',
+                  height: 32,
+                  fit: BoxFit.contain,
+                ),
+                centerTitle: true,
+              ),
+            ),
+          ),
+        ),
+        body: RefreshIndicator(
+          onRefresh: () async => _refreshBuyers(),
+          edgeOffset: MediaQuery.of(context).padding.top + kToolbarHeight,
+          child: Column(
+            children: [
+              SizedBox(height: MediaQuery.of(context).padding.top + kToolbarHeight + 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Interested Buyers',
+                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      widget.stock.coffeeType,
+                      style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary.withAlpha((0.7 * 255).round())),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: FutureBuilder<List<kaawa.User>>(
+                  future: _buyersFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return _buildShimmerList();
+                    }
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                            const SizedBox(height: 16),
+                            Text('Error: ${snapshot.error}'),
+                            ElevatedButton(onPressed: _refreshBuyers, child: const Text('Retry')),
+                          ],
+                        ),
+                      );
+                    }
+                    final buyers = snapshot.data ?? [];
+                    if (buyers.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.people_outline, size: 64, color: theme.hintColor.withValues(alpha: 0.5)),
+                            const SizedBox(height: 16),
+                            const Text('No interested buyers yet.'),
+                            const SizedBox(height: 8),
+                            TextButton(onPressed: _refreshBuyers, child: const Text('Refresh')),
+                          ],
+                        ),
+                      );
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      itemCount: buyers.length,
+                      itemBuilder: (context, index) {
+                        final b = buyers[index];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          elevation: 2,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            leading: AppAvatar(
+                              filePath: b.profilePicturePath,
+                              size: 48,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (c) => ProfileScreen(currentUser: widget.currentUser, profileOwner: b),
+                                  ),
+                                );
+                              },
+                            ),
+                            title: Text(b.fullName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            subtitle: Text(b.district ?? 'No district'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.star_outline),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (c) => ViewReviewsScreen(
+                                          reviewedUser: b,
+                                          currentUser: widget.currentUser,
+                                          onOpenProfile: (reviewer) {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (c) => ProfileScreen(currentUser: widget.currentUser, profileOwner: reviewer),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.chat_bubble_outline),
+                                  onPressed: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (c) => ChatScreen(currentUser: widget.currentUser, otherUser: b),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     );
                   },
                 ),
-              );
-            },
-          );
-        },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

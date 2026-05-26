@@ -39,83 +39,103 @@ class _AdminConversationScreenState extends State<AdminConversationScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(_otherUser?.fullName ?? 'Conversation'),
+        title: Image.asset(
+          'assets/icons/pngwing.png',
+          height: 32,
+          fit: BoxFit.contain,
+        ),
+        centerTitle: true,
       ),
-      body: FutureBuilder<List<Message>>(
-        future: _messagesFuture,
-        builder: (context, snap) {
-          if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
-          final msgs = snap.data ?? [];
-          if (msgs.isEmpty) return const Center(child: Text('No messages'));
+      body: Column(
+        children: [
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Message Thread',
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: FutureBuilder<List<Message>>(
+              future: _messagesFuture,
+              builder: (context, snap) {
+                if (snap.connectionState != ConnectionState.done) return const Center(child: CompactLoader());
+                final msgs = snap.data ?? [];
+                if (msgs.isEmpty) return const Center(child: Text('No messages'));
 
-          return ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            itemCount: msgs.length,
-            itemBuilder: (context, i) {
-              final m = msgs[i];
-              final isFromUser = m.senderId == widget.userId;
-              final sender = isFromUser ? _user : _otherUser;
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  itemCount: msgs.length,
+                  itemBuilder: (context, i) {
+                    final m = msgs[i];
+                    final isFromUser = m.senderId == widget.userId;
+                    final sender = isFromUser ? _user : _otherUser;
 
-              // message bubble
-              final bubble = Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-                decoration: BoxDecoration(
-                  color: isFromUser ? theme.colorScheme.primary : theme.cardColor,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(12),
-                    topRight: const Radius.circular(12),
-                    bottomLeft: Radius.circular(isFromUser ? 12 : 2),
-                    bottomRight: Radius.circular(isFromUser ? 2 : 12),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (sender != null) ...[
-                      Text(
-                        sender.fullName,
-                        style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: isFromUser ? theme.colorScheme.onPrimary : null),
+                    // message bubble
+                    final bubble = Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
+                      decoration: BoxDecoration(
+                        color: isFromUser ? theme.colorScheme.primary : theme.cardColor,
+                        borderRadius: BorderRadius.only(
+                          topLeft: const Radius.circular(12),
+                          topRight: const Radius.circular(12),
+                          bottomLeft: Radius.circular(isFromUser ? 12 : 2),
+                          bottomRight: Radius.circular(isFromUser ? 2 : 12),
+                        ),
                       ),
-                      const SizedBox(height: 4),
-                    ],
-                    Text(
-                      m.text,
-                      style: TextStyle(color: isFromUser ? theme.colorScheme.onPrimary : null),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      m.timestamp.toLocal().toString().split('.').first,
-                      style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, color: isFromUser ? theme.colorScheme.onPrimary.withAlpha((0.7 * 255).round()) : theme.textTheme.bodySmall?.color == null ? null : theme.textTheme.bodySmall!.color!.withAlpha((0.7 * 255).round())),
-                    ),
-                  ],
-                ),
-              );
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: isFromUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                  children: isFromUser
-                      ? [
-                          // user's message on right
-                          Flexible(child: bubble),
-                          const SizedBox(width: 8),
-                          if (_user != null)
-                            AppAvatar(filePath: _user!.profilePicturePath, imageUrl: _user!.profilePicturePath, size: 36),
-                        ]
-                      : [
-                          if (_otherUser != null)
-                            AppAvatar(filePath: _otherUser!.profilePicturePath, imageUrl: _otherUser!.profilePicturePath, size: 36),
-                          const SizedBox(width: 8),
-                          Flexible(child: bubble),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (sender != null) ...[
+                            Text(
+                              sender.fullName,
+                              style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.bold, color: isFromUser ? theme.colorScheme.onPrimary : null),
+                            ),
+                            const SizedBox(height: 4),
+                          ],
+                          Text(
+                            m.text,
+                            style: TextStyle(color: isFromUser ? theme.colorScheme.onPrimary : null),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            m.timestamp.toLocal().toString().split('.').first,
+                            style: theme.textTheme.bodySmall?.copyWith(fontSize: 10, color: isFromUser ? theme.colorScheme.onPrimary.withAlpha((0.7 * 255).round()) : theme.textTheme.bodySmall?.color == null ? null : theme.textTheme.bodySmall!.color!.withAlpha((0.7 * 255).round())),
+                          ),
                         ],
-                ),
-              );
-            },
-          );
-        },
+                      ),
+                    );
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: isFromUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        children: isFromUser
+                            ? [
+                                // user's message on right
+                                Flexible(child: bubble),
+                                const SizedBox(width: 8),
+                                if (_user != null)
+                                  AppAvatar(filePath: _user!.profilePicturePath, imageUrl: _user!.profilePicturePath, size: 36),
+                              ]
+                            : [
+                                if (_otherUser != null)
+                                  AppAvatar(filePath: _otherUser!.profilePicturePath, imageUrl: _otherUser!.profilePicturePath, size: 36),
+                                const SizedBox(width: 8),
+                                Flexible(child: bubble),
+                              ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
