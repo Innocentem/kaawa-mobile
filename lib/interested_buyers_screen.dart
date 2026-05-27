@@ -58,13 +58,13 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: AppBar(
-                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.7),
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
                 elevation: 0,
                 foregroundColor: theme.colorScheme.onPrimary,
-                title: Image.asset(
-                  'assets/icons/pngwing.png',
-                  height: 32,
-                  fit: BoxFit.contain,
+                iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+                title: const Text(
+                  'Interested Buyers',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 centerTitle: true,
               ),
@@ -82,10 +82,6 @@ class _InterestedBuyersScreenState extends State<InterestedBuyersScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Interested Buyers',
-                      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                    ),
                     Text(
                       widget.stock.coffeeType,
                       style: theme.textTheme.titleMedium?.copyWith(color: theme.colorScheme.primary.withAlpha((0.7 * 255).round())),

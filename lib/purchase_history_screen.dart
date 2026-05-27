@@ -47,9 +47,10 @@ class _PurchaseHistoryScreenState extends State<PurchaseHistoryScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: AppBar(
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.7),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
               elevation: 0,
               foregroundColor: theme.colorScheme.onPrimary,
+              iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
               title: const Text('My Purchases', style: TextStyle(fontWeight: FontWeight.bold)),
               centerTitle: true,
             ),

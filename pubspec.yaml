@@ -48,7 +48,9 @@ flutter:
     - assets/images/avatar.jpg
     - assets/images/fallback.jpg
     - assets/images/seeds.jpg
+    - assets/images/seeds_light.jpg
     - assets/images/bg.jpg
+    - assets/images/IMG_7329.jpg
     - assets/images/white.jpg
     - assets/icons/pngwing.png
   fonts:

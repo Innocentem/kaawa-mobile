@@ -201,15 +201,14 @@ class _ManageStockScreenState extends State<ManageStockScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: AppBar(
-              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.8),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
               elevation: 0,
               foregroundColor: theme.colorScheme.onPrimary,
               iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
               actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
-              title: Image.asset(
-                'assets/icons/pngwing.png',
-                height: 32,
-                fit: BoxFit.contain,
+              title: const Text(
+                'Manage Stock',
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
               centerTitle: true,
             ),

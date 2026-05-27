@@ -376,15 +376,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: AppBar(
-              backgroundColor: theme.scaffoldBackgroundColor.withValues(alpha: 0.8),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
               elevation: 0,
               centerTitle: true,
-              title: Image.asset(
-                'assets/icons/pngwing.png',
-                height: 32,
-                fit: BoxFit.contain,
+              title: Text(
+                'Profile',
+                style: TextStyle(
+                  color: theme.colorScheme.onPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               automaticallyImplyLeading: true,
+              iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+              actionsIconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
               actions: [
                 if (!_isOwnProfile && _favoriteStatusLoaded)
                   IconButton(
@@ -407,13 +411,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'Profile',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
             // Avatar and name
             Center(
               child: Column(
@@ -545,50 +543,60 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                   const SizedBox(height: 16),
                   if (_isOwnProfile && _isEditing)
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveChanges,
-                      child: _isSaving
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Text('Save Changes'),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        icon: _isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.save),
+                        onPressed: _isSaving ? null : _saveChanges,
+                        label: const Text('Save Changes'),
+                      ),
                     ),
                   if (_isOwnProfile &&
                       _profileOwner.userType == kaawa.UserType.farmer)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: ElevatedButton.icon(
-                          icon: const Icon(Icons.inventory),
-                          label: const Text('Manage Coffee Stock'),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    ManageStockScreen(farmer: _profileOwner),
-                              ),
-                            );
-                          }),
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                            icon: const Icon(Icons.inventory),
+                            label: const Text('Manage Coffee Stock'),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      ManageStockScreen(farmer: _profileOwner),
+                                ),
+                              );
+                            }),
+                      ),
                     ),
                   if (_isOwnProfile &&
                       _profileOwner.userType != kaawa.UserType.admin)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.support_agent),
-                        label: const Text('Message Admin'),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ContactAdminScreen(
-                                  currentUser: widget.currentUser),
-                            ),
-                          );
-                        },
+                      padding: const EdgeInsets.only(top: 16.0),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.support_agent),
+                          label: const Text('Message Admin'),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ContactAdminScreen(
+                                    currentUser: widget.currentUser),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                   if (!_isOwnProfile &&

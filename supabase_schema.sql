@@ -214,6 +214,21 @@ create table if not exists public.password_resets (
   created_at timestamptz default now()
 );
 
+-- MIGRATIONS for existing tables (Ensures columns added in updates exist)
+do $$
+begin
+  -- Add quantity_remaining to coffee_stock if missing
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='coffee_stock' and column_name='quantity_remaining') then
+    alter table public.coffee_stock add column quantity_remaining float8;
+    update public.coffee_stock set quantity_remaining = quantity;
+  end if;
+
+  -- Add seen_by_farmer to interested_buyers if missing
+  if not exists (select 1 from information_schema.columns where table_schema='public' and table_name='interested_buyers' and column_name='seen_by_farmer') then
+    alter table public.interested_buyers add column seen_by_farmer boolean default false;
+  end if;
+end $$;
+
 alter table public.password_resets enable row level security;
 
 do $$

@@ -14,6 +14,7 @@ import 'package:kaawa/admin_home_screen.dart';
 import 'package:kaawa/change_password_screen.dart';
 import 'package:kaawa/data/supabase_service.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class InitialScreen extends StatefulWidget {
   const InitialScreen({super.key});
@@ -196,6 +197,34 @@ class WelcomeScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Developer Contact:',
+                style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    backgroundImage: const AssetImage('assets/images/IMG_7329.jpg'),
+                    backgroundColor: theme.colorScheme.primaryContainer,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildDevAction(context, theme, Icons.email, 'mailto:mwbzinno@gmail.com', 'Email'),
+                        _buildDevAction(context, theme, Icons.phone, 'tel:+256751433267', 'Call'),
+                        _buildDevAction(context, theme, Icons.code, 'https://github.com/Innocentem', 'GitHub'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -204,6 +233,26 @@ class WelcomeScreen extends StatelessWidget {
             onPressed: () => Navigator.pop(c),
             child: const Text('Close'),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDevAction(BuildContext context, ThemeData theme, IconData icon, String url, String label) {
+    return InkWell(
+      onTap: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: theme.colorScheme.primary, size: 24),
+          const SizedBox(height: 4),
+          Text(label, style: theme.textTheme.labelSmall),
         ],
       ),
     );
@@ -285,7 +334,9 @@ class WelcomeScreen extends StatelessWidget {
                         bottomRight: Radius.circular(40),
                       ),
                       child: Image.asset(
-                        'assets/images/seeds.jpg',
+                        theme.brightness == Brightness.dark
+                            ? 'assets/images/seeds.jpg'
+                            : 'assets/images/seeds_light.jpg',
                         width: double.infinity,
                         height: MediaQuery.of(context).size.height * 0.45,
                         fit: BoxFit.cover,

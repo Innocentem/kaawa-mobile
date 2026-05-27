@@ -83,14 +83,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: AppBar(
-              backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.8),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
               elevation: 0,
-              foregroundColor: theme.colorScheme.onSurface,
+              foregroundColor: theme.colorScheme.onPrimary,
+              iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
               title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.bold)),
               centerTitle: true,
               actions: [
                 IconButton(
                   icon: const Icon(Icons.done_all),
+                  color: theme.colorScheme.onPrimary,
                   onPressed: () async {
                     await SupabaseService.instance.markAllNotificationsRead(widget.currentUser.id!);
                     _refresh();

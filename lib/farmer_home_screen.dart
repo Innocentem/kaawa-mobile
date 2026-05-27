@@ -156,6 +156,8 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _searchController.removeListener(_filterBuyers);
+    _searchController.dispose();
     _messageSubscription?.cancel();
     _interestSubscription?.cancel();
     _purchaseSubscription?.cancel();
@@ -224,6 +226,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   Future<void> _loadFavorites() async {
     final favorites = await _supabaseService.getFavorites(widget.farmer.id!);
+    if (!mounted) return;
     setState(() {
       _favoriteUserIds = favorites.map((user) => user.id!).toSet();
     });
@@ -231,16 +234,19 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   Future<void> _getUnreadMessageCount() async {
     final count = await _supabaseService.getUnreadMessageCount(widget.farmer.id!);
+    if (!mounted) return;
     setState(() => _unreadMessageCount = count);
   }
 
   Future<void> _getUnreadNotificationCount() async {
     final count = await _supabaseService.getUnreadNotificationCount(widget.farmer.id!);
+    if (!mounted) return;
     setState(() => _unreadNotificationCount = count);
   }
 
   Future<void> _getPurchaseRequestCount() async {
     final count = await _supabaseService.getPurchaseRequestCountForFarmer(widget.farmer.id!);
+    if (!mounted) return;
     setState(() => _purchaseRequestCount = count);
   }
 
@@ -261,6 +267,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
   }
 
   void _filterBuyers() {
+    if (!mounted) return;
     final query = _searchController.text.toLowerCase();
     setState(() {
       _filteredBuyers = _allBuyers.where((buyer) {
@@ -297,6 +304,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
     } else {
       await _supabaseService.addFavorite(widget.farmer.id!, buyerId);
     }
+    if (!mounted) return;
     _loadFavorites();
   }
 
@@ -436,6 +444,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   Future<void> _loadTotalInterestCount() async {
     final count = await _supabaseService.getUnreadInterestedCountForFarmer(widget.farmer.id!);
+    if (!mounted) return;
     setState(() {
       _totalInterestedCount = count;
     });
@@ -457,6 +466,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
       final total = await _supabaseService.getUnreadInterestedCountForFarmer(widget.farmer.id!);
 
+      if (!mounted) return;
       setState(() {
         _farmerStocks = stocks;
         _interestedByStock = map;
@@ -484,7 +494,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
 
   Future<void> _refreshCurrentFarmer() async {
     final refreshed = await _supabaseService.getProfile(widget.farmer.id!);
-    if (refreshed == null) return;
+    if (refreshed == null || !mounted) return;
     setState(() {
       _currentFarmer = refreshed;
     });
@@ -508,7 +518,7 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: AppBar(
-                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.7),
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
                 elevation: 0,
                 foregroundColor: theme.colorScheme.onPrimary,
                 iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
@@ -580,10 +590,9 @@ class _FarmerHomeScreenState extends State<FarmerHomeScreen> with TickerProvider
                     ),
                   ),
                 ),
-                title: Image.asset(
-                  'assets/icons/pngwing.png',
-                  height: 32,
-                  fit: BoxFit.contain,
+                title: const Text(
+                  'Home',
+                  style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 centerTitle: true,
                 actions: [

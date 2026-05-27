@@ -719,29 +719,41 @@ class _BuyerHomeScreenState extends State<BuyerHomeScreen> with TickerProviderSt
       child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          backgroundColor: theme.colorScheme.surface.withValues(alpha: 0.7),
+          backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
           elevation: 0,
-          foregroundColor: theme.colorScheme.onSurface,
-          iconTheme: IconThemeData(color: theme.colorScheme.primary),
+          foregroundColor: theme.colorScheme.onPrimary,
+          iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
           flexibleSpace: ClipRect(
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: Container(color: Colors.transparent),
             ),
           ),
-          title: Image.asset(
-            'assets/icons/pngwing.png',
-            height: 32,
-            fit: BoxFit.contain,
+          title: const Text(
+            'Home',
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
+          centerTitle: true,
           actions: [
             IconButton(
               onPressed: _openNotifications,
               icon: Stack(
                 children: [
-                  const Icon(Icons.notifications_none),
+                  Icon(Icons.notifications_none, color: theme.colorScheme.onPrimary),
                   if (_unreadNotificationCount > 0)
-                    Positioned(right: 0, top: 0, child: Container(padding: const EdgeInsets.all(2), decoration: BoxDecoration(color: theme.colorScheme.error, shape: BoxShape.circle), constraints: const BoxConstraints(minWidth: 12, minHeight: 12))),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.error,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: theme.colorScheme.primary, width: 1),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+                      ),
+                    ),
                 ],
               ),
             ),

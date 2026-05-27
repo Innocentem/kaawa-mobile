@@ -26,12 +26,16 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Image.asset(
-          'assets/icons/pngwing.png',
-          height: 32,
-          fit: BoxFit.contain,
+        backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.9),
+        elevation: 0,
+        foregroundColor: theme.colorScheme.onPrimary,
+        iconTheme: IconThemeData(color: theme.colorScheme.onPrimary),
+        title: const Text(
+          'Messages',
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: true,
       ),
@@ -47,13 +51,6 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'Messages',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
                 Expanded(
                   child: conversations.isEmpty
                       ? const Center(child: Text('You have no conversations yet.'))
